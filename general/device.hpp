@@ -13,6 +13,7 @@
 #define MFEM_DEVICE_HPP
 
 #include "globals.hpp"
+#include "ceed.h"
 
 namespace mfem
 {
@@ -50,7 +51,14 @@ struct Backend
       OCCA_OMP = 1 << 7,
       /** @brief [device] OCCA CUDA backend. Enabled when MFEM_USE_OCCA = YES
           and MFEM_USE_CUDA = YES. */
-      OCCA_CUDA = 1 << 8
+      OCCA_CUDA = 1 << 8,
+      /** @brief [host] CEED backend: GPU backends can still be used, but
+          with expensive memCopies.
+          Enabled when MFEM_USE_CEED = YES. */
+      CEED_CPU  = 1 << 9,
+      /** @brief [device] Ceed backends working in colaboration with the Cuda backend.
+          Enabled when MFEM_USE_CEED = YES and MFEM_USE_CUDA = YES. */
+      CEED_CUDA = 1 << 10
    };
 
    /** @brief Additional useful constants. For example, the *_MASK constants can
@@ -58,7 +66,7 @@ struct Backend
    enum
    {
       /// Number of backends: from (1 << 0) to (1 << (NUM_BACKENDS-1)).
-      NUM_BACKENDS = 9,
+      NUM_BACKENDS = 11,
       /// Biwise-OR of all CUDA backends
       CUDA_MASK = CUDA | RAJA_CUDA | OCCA_CUDA,
       /// Biwise-OR of all RAJA backends
@@ -67,6 +75,8 @@ struct Backend
       OCCA_MASK = OCCA_CPU | OCCA_OMP | OCCA_CUDA,
       /// Biwise-OR of all OpenMP backends
       OMP_MASK = OMP | RAJA_OMP | OCCA_OMP,
+      /// Bitwise-OR of all CEED backends
+      CEED_MASK = CEED_CPU | CEED_CUDA,
       /// Biwise-OR of all device backends
       DEVICE_MASK = CUDA_MASK
    };
@@ -147,7 +157,6 @@ public:
    /// Enable the use of the configured device in the code that follows.
    /** After this call MFEM classes will use the backend kernels whenever
        possible, transferring data automatically to the device, if necessary.
-
        If the only configured backend is the default host CPU one, the device
        will remain disabled. */
    static inline void Enable()
@@ -181,6 +190,8 @@ public:
        Backend::*_MASK, or combinations of those. */
    static inline bool Allows(unsigned long b_mask)
    { return Get().allowed_backends & b_mask; }
+
+   static Ceed GetCeed();
 
    ~Device();
 };

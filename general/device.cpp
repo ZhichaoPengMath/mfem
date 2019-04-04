@@ -12,6 +12,7 @@
 #include "forall.hpp"
 #include "cuda.hpp"
 #include "occa.hpp"
+#include "ceed.h"
 
 #include <string>
 #include <map>
@@ -28,20 +29,21 @@ CUstream *cuStream = NULL;
 static CUdevice cuDevice;
 static CUcontext cuContext;
 OccaDevice occaDevice;
+Ceed ceed;
 
 // Backends listed by priority, high to low:
 static const Backend::Id backend_list[Backend::NUM_BACKENDS] =
 {
-   Backend::OCCA_CUDA, Backend::RAJA_CUDA, Backend::CUDA,
+   Backend::OCCA_CUDA, Backend::RAJA_CUDA, Backend::CEED_CUDA, Backend::CUDA,
    Backend::OCCA_OMP, Backend::RAJA_OMP, Backend::OMP,
-   Backend::OCCA_CPU, Backend::RAJA_CPU, Backend::CPU
+   Backend::OCCA_CPU, Backend::RAJA_CPU, Backend::CEED_CPU, Backend::CPU
 };
 
 // Backend names listed by priority, high to low:
 static const char *backend_name[Backend::NUM_BACKENDS] =
 {
-   "occa-cuda", "raja-cuda", "cuda", "occa-omp", "raja-omp", "omp",
-   "occa-cpu", "raja-cpu", "cpu"
+   "occa-cuda", "raja-cuda", "ceed-cuda", "cuda", "occa-omp", "raja-omp", "omp",
+   "occa-cpu", "raja-cpu", "ceed-cpu", "cpu"
 };
 
 } // namespace mfem::internal
@@ -69,6 +71,10 @@ void Device::Configure(const std::string &device, const int dev)
    // OCCA_CUDA needs CUDA or RAJA_CUDA:
    Get().allowed_backends = Get().backends;
    if (Allows(Backend::OCCA_CUDA) && !Allows(Backend::RAJA_CUDA))
+   {
+      Get().MarkBackend(Backend::CUDA);
+   }
+   if (Allows(Backend::CEED_CUDA))
    {
       Get().MarkBackend(Backend::CUDA);
    }
@@ -177,6 +183,16 @@ static void OccaDeviceSetup(CUdevice cu_dev, CUcontext cu_ctx)
 #endif
 }
 
+static void CeedDeviceSetup(const char* ceed_spec)
+{
+   // char* ceed_spec = "/cpu/self/ref/blocked";
+   // char* ceed_spec = "/gpu/cuda/ref";
+   CeedInit(ceed_spec, &internal::ceed);
+}
+
+Ceed Device::GetCeed()
+{ return internal::ceed; }
+
 void Device::Setup(const int device)
 {
    MFEM_VERIFY(ngpu == -1, "the mfem::Device is already configured!");
@@ -207,6 +223,14 @@ void Device::Setup(const int device)
    if (Allows(Backend::OCCA_MASK))
    {
       OccaDeviceSetup(internal::cuDevice, internal::cuContext);
+   }
+   if (Allows(Backend::CEED_CPU))
+   {
+      CeedDeviceSetup("/cpu/self/ref/blocked");
+   }
+   if (Allows(Backend::CEED_CUDA))
+   {
+      CeedDeviceSetup("/gpu/cuda/ref");
    }
 }
 
