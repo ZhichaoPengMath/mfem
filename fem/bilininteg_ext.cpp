@@ -334,6 +334,8 @@ static void FESpace2Ceed(const mfem::FiniteElementSpace &fes,
 static void CeedPADiffusionAssemble(const FiniteElementSpace &fes, CeedData& ceedData)
 {
    Ceed ceed(Device::GetCeed());
+   const bool dev_enabled = Device::IsEnabled();
+   if (dev_enabled) { Device::Disable(); }
    mfem::Mesh *mesh = fes.GetMesh();
    const int order = fes.GetOrder(0);
    const int ir_order = 2 * (order + 2) - 1; // <-----
@@ -346,6 +348,7 @@ static void CeedPADiffusionAssemble(const FiniteElementSpace &fes, CeedData& cee
    const mfem::FiniteElementSpace *mesh_fes = mesh->GetNodalFESpace();
    MFEM_VERIFY(mesh_fes, "the Mesh has no nodal FE space");
    FESpace2Ceed(*mesh_fes, ir, ceed, &ceedData.mesh_basis, &ceedData.mesh_restr);
+   if (dev_enabled) { Device::Enable(); }
    CeedBasisGetNumQuadraturePoints(ceedData.basis, &nqpts);
 
    CeedElemRestrictionCreateIdentity(ceed, nelem, nqpts * dim * (dim + 1) / 2,
@@ -432,6 +435,7 @@ static void CeedPADiffusionAssemble(const FiniteElementSpace &fes, CeedData& cee
 
    CeedVectorCreate(ceed, fes.GetNDofs(), &ceedData.u);
    CeedVectorCreate(ceed, fes.GetNDofs(), &ceedData.v);
+   
 }
 
 /// libCEED Q-function for building quadrature data for a mass operator
@@ -1346,8 +1350,8 @@ void DiffusionIntegrator::MultAssembled(Vector &x, Vector &y)
       CeedGetPreferredMemType(Device::GetCeed(),&mem);
       if ( mm.IsEnabled() && mem==CEED_MEM_DEVICE )
       {
-         x_ptr = static_cast<CeedScalar*>(mm.GetDevicePtr(x.GetData()));
-         y_ptr = static_cast<CeedScalar*>(mm.GetDevicePtr(y.GetData()));
+         x_ptr = Ptr(x.GetData());
+         y_ptr = Ptr(y.GetData());
       } else {
          x_ptr = x.GetData();
          y_ptr = y.GetData();

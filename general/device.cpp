@@ -218,12 +218,6 @@ void Device::Setup(const int device)
    // We initialize CUDA and/or RAJA_CUDA first so OccaDeviceSetup() can reuse
    // the same initialized cuDevice and cuContext objects when OCCA_CUDA is
    // enabled.
-   if (Allows(Backend::CUDA)) { CudaDeviceSetup(dev, ngpu); }
-   if (Allows(Backend::RAJA_CUDA)) { RajaDeviceSetup(dev, ngpu); }
-   if (Allows(Backend::OCCA_MASK))
-   {
-      OccaDeviceSetup(internal::cuDevice, internal::cuContext);
-   }
    if (Allows(Backend::CEED_CPU))
    {
       CeedDeviceSetup("/cpu/self/ref/blocked");
@@ -231,6 +225,12 @@ void Device::Setup(const int device)
    if (Allows(Backend::CEED_CUDA))
    {
       CeedDeviceSetup("/gpu/cuda/ref");
+   }
+   if (Allows(Backend::CUDA)) { CudaDeviceSetup(dev, ngpu); }
+   if (Allows(Backend::RAJA_CUDA)) { RajaDeviceSetup(dev, ngpu); }
+   if (Allows(Backend::OCCA_MASK))
+   {
+      OccaDeviceSetup(internal::cuDevice, internal::cuContext);
    }
 }
 
