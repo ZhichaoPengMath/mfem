@@ -370,14 +370,13 @@ static void CeedPADiffusionAssemble(const FiniteElementSpace &fes, CeedData& cee
    // quadrature data) and set its context data.
    switch(ceedData.coeff_type){
       case Const:
-      std::cout<< __FILE__":f_build_diff_const" <<std::endl;
       CeedQFunctionCreateInterior(ceed, 1, f_build_diff_const,
-                                  "/home/dudouit1/Projects/mfem/fem/bilininteg_ext.okl:f_build_diff_const", &ceedData.build_qfunc);
+         MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_build_diff_const", &ceedData.build_qfunc);
       ceedData.build_ctx.coeff = ((CeedConstCoeff*)ceedData.coeff)->val;
       break;
       case Grid:
       CeedQFunctionCreateInterior(ceed, 1, f_build_diff_grid,
-                                  "/home/dudouit1/Projects/mfem/fem/bilininteg_ext.okl:f_build_diff_grid", &ceedData.build_qfunc);
+         MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_build_diff_grid", &ceedData.build_qfunc);
       CeedQFunctionAddInput(ceedData.build_qfunc, "coeff", 1, CEED_EVAL_INTERP);
       break;
       default:
@@ -418,7 +417,7 @@ static void CeedPADiffusionAssemble(const FiniteElementSpace &fes, CeedData& cee
 
    // Create the Q-function that defines the action of the diff operator.
    CeedQFunctionCreateInterior(ceed, 1, f_apply_diff,
-      "/home/dudouit1/Projects/mfem/fem/bilininteg_ext.okl:f_apply_diff", &ceedData.apply_qfunc);
+      MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_apply_diff", &ceedData.build_qfunc);
    CeedQFunctionAddInput(ceedData.apply_qfunc, "u", 1, CEED_EVAL_GRAD);
    CeedQFunctionAddInput(ceedData.apply_qfunc, "rho", dim * (dim + 1) / 2, CEED_EVAL_NONE);
    CeedQFunctionAddOutput(ceedData.apply_qfunc, "v", 1, CEED_EVAL_GRAD);
@@ -562,12 +561,12 @@ static void CeedPAMassAssemble(const FiniteElementSpace &fes, CeedData& ceedData
   switch(ceedData.coeff_type){
     case Const:
       CeedQFunctionCreateInterior(ceed, 1, f_build_mass_const,
-                                  __FILE__":f_build_mass_const", &ceedData.build_qfunc);
+         MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_build_mass_const", &ceedData.build_qfunc);
       ceedData.build_ctx.coeff = ((CeedConstCoeff*)ceedData.coeff)->val;
       break;
     case Grid:
       CeedQFunctionCreateInterior(ceed, 1, f_build_mass_grid,
-                                  __FILE__":f_build_mass_grid", &ceedData.build_qfunc);
+         MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_build_mass_grid", &ceedData.build_qfunc);
       CeedQFunctionAddInput(ceedData.build_qfunc, "coeff", 1, CEED_EVAL_INTERP);
       break;
     default:
@@ -609,7 +608,7 @@ static void CeedPAMassAssemble(const FiniteElementSpace &fes, CeedData& ceedData
 
   // Create the Q-function that defines the action of the mass operator.
   CeedQFunctionCreateInterior(ceed, 1, f_apply_mass,
-                              __FILE__":f_apply_mass", &ceedData.apply_qfunc);
+   MFEM_SOURCE_DIR"/fem/bilininteg_ext.okl:f_apply_mass", &ceedData.build_qfunc);
   CeedQFunctionAddInput(ceedData.apply_qfunc, "u", 1, CEED_EVAL_INTERP);
   CeedQFunctionAddInput(ceedData.apply_qfunc, "rho", 1, CEED_EVAL_NONE);
   CeedQFunctionAddOutput(ceedData.apply_qfunc, "v", 1, CEED_EVAL_INTERP);
