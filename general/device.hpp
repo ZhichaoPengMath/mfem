@@ -111,11 +111,13 @@ private:
        Device is enabled. When the Device is disabled, only the host CPU backend
        is allowed. */
    unsigned long allowed_backends;
+   std::string ceed_option;
 
    Device()
       : mode(Device::SEQUENTIAL),
         backends(Backend::CPU),
-        allowed_backends(backends) { }
+        allowed_backends(backends),
+        ceed_option() { }
    Device(Device const&);
    void operator=(Device const&);
    static Device& Get() { static Device singleton; return singleton; }
