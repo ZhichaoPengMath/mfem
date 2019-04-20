@@ -193,8 +193,6 @@ public:
    static inline bool Allows(unsigned long b_mask)
    { return Get().allowed_backends & b_mask; }
 
-   static Ceed GetCeed();
-
    ~Device();
 };
 
