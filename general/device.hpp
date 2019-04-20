@@ -13,7 +13,6 @@
 #define MFEM_DEVICE_HPP
 
 #include "globals.hpp"
-#include "ceed.h"
 
 namespace mfem
 {
