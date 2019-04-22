@@ -97,13 +97,16 @@ void PABilinearFormExtension::FormLinearSystem(const Array<int> &ess_tdof_list,
 void PABilinearFormExtension::Mult(const Vector &x, Vector &y) const
 {
    Array<BilinearFormIntegrator*> &integrators = *a->GetDBFI();
-   if (Device::Allows(Backend::CEED_MASK)) {
+   if (Device::Allows(Backend::CEED_MASK))
+   {
       const int iSz = integrators.Size();
       for (int i = 0; i < iSz; ++i)
       {
          integrators[i]->MultAssembled(const_cast<Vector&>(x), y);
       }
-   } else {
+   }
+   else
+   {
       elem_restrict->Mult(x, localX);
       localY = 0.0;
       const int iSz = integrators.Size();
