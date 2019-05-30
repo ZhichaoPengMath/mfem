@@ -34,3 +34,7 @@ ldg_pzc.cpp: (1) Should I use MixedBilinearForm?
 
 ex8_pzc.cpp: (1) How to impose the boundary condition?	
 ultra_weak_dpg.cpp: (1) How to impose boundary condition?
+
+05/30/2019
+grad_dpg.cpp: (1) solve \grad u = f
+			  (2) test the self made DGNormalTraceJump opperator
