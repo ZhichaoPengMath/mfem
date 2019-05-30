@@ -32,6 +32,9 @@
 #include "staticcond.hpp"
 #include "tmop.hpp"
 
+/* 2019/05/30  pzc: add dpg stuff */
+#include "dpg_integrators.hpp"
+
 #ifdef MFEM_USE_MPI
 #include "pfespace.hpp"
 #include "pgridfunc.hpp"

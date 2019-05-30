@@ -1,0 +1,36 @@
+05/22/2019
+Example 1: essential_bdr_attributes for Dirichelet boundary conditions
+Example 3: (i)  H(curl) space and 
+		   (ii) non-zero source term,
+		   (iii) vector unknown
+		   (iv) how to compute error with exact solution
+		   (v) GetNE(): element number
+		   (vi) vector source 
+Example 4: hybirdization and static consendation
+Example 5: (i) block structure
+		   (ii) scalar source
+
+
+05/23/2019
+Question: Is mesh->sdim() different from mesh->dim() only when we use space-time mesh? 
+Question: how to output the computational domain?
+
+ex1_pzc.cpp:(1) solve -\laplace u = f 
+			(2) how to use VectorFunctionCoefficient
+							FunctionCoefficient
+							ConstCoefficient
+			(3) Use Projection from exact solution to deal with the dirichelet boundary condition
+
+05/24/2019
+ex14_pzc.cpp: (1) how to use DG;
+		      (2) AddBdrFaceIntegrator;
+			  (3) DGDirichletLFIntegrator(u_coeff, one, sigma, kappa));
+			  (4) Define finite element space for vectors
+			  (5) VectorDivergenceIntegrator (Q div u,p), u = (v1,...,vn) , p is a scalar, Q is a scalar
+
+05/27/2019
+ldg_pzc.cpp: (1) Should I use MixedBilinearForm?
+			 (2) Should I write my own numerical flux just as the HDG people?
+
+ex8_pzc.cpp: (1) How to impose the boundary condition?	
+ultra_weak_dpg.cpp: (1) How to impose boundary condition?

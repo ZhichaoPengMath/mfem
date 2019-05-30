@@ -1,0 +1,6 @@
+2019/05/30
+(1) Add dpg_integrators.cpp and dpg_integrators.hpp to the fem
+(2) modify fem.hpp to include dpg_integrators
+(3) Add practice examples:
+	ex1_pzc.cpp ex14_pzc.cpp  ex8_pzc.cpp
+
