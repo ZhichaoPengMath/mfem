@@ -174,9 +174,9 @@ int main(int argc, char *argv[])
 
    // 7. Set device config parameters from the command line options and switch
    //    to working on the device.
-   Device::Configure(device);
-   Device::Print();
-   Device::Enable();
+//   Device::Configure(device);
+//   Device::Print();
+//   Device::Enable();
 
    // 8. Define the solution vector x as a finite element grid function
    //    corresponding to fespace. Initialize x by projecting the exact
@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
 //   x.ProjectCoefficient(U);
 
    // 13. Switch back to the host.
-   Device::Disable();
+   //Device::Disable();
 
    // 14. Save the refined mesh and the solution. This output can be viewed later
    //     using GLVis: "glvis -m refined.mesh -g sol.gf".
