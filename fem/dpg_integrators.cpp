@@ -53,7 +53,7 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       {
          order = test_fe1.GetOrder() - 1;
       }
-      order += trial_face_fe.GetOrder();
+      order += trial_face_fe.GetOrder()+1;
       ir = &IntRules.Get(Trans.FaceGeom, order);
    }
 

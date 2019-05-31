@@ -161,8 +161,6 @@ int main(int argc, char *argv[])
 //   cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
 //   cout<<" number of essential true dofs "<<ess_trial_dof_list.Size()<<endl;
 //
-////   x.GetBlock(x0_var).ProjectBdrCoefficient(u_coeff, ess_bdr);
-////   x.GetBlock(x0_var).SetSubVector(ess_trial_dof_list,10.);
    GridFunction x0;
    x0.MakeRef(u0_space, x.GetBlock(u0_var), 0);
 //   x0.ProjectCoefficient(u_coeff);
@@ -190,8 +188,9 @@ int main(int argc, char *argv[])
    /* mass matrix corresponding to the test norm */
    BilinearForm *Sinv = new BilinearForm(test_space);
    SumIntegrator *Sum = new SumIntegrator;
-   Sum->AddIntegrator(new DiffusionIntegrator(one));
-   Sum->AddIntegrator(new MassIntegrator(one));
+//   Sum->AddIntegrator(new DiffusionIntegrator(one));
+   Sum->AddIntegrator(new DivDivIntegrator(one));
+   Sum->AddIntegrator(new VectorMassIntegrator(one));
 
    Sinv->AddDomainIntegrator(new InverseIntegrator(Sum));
    Sinv->Assemble();
@@ -217,7 +216,7 @@ int main(int argc, char *argv[])
 	   <<" Sinv: "<< matSinv.Width()<< " X "<<matSinv.Height()<<endl
 	   <<endl<<endl;
 //   SparseMatrix &matS0   = S0->SpMat();
-     ofstream myfile ("Kmat.dat");
+//     ofstream myfile ("Kmat.dat");
 
    // 8. Set up the 1x2 block Least Squares DPG operator, B = [B0  Bhat],
    //    the normal equation operator, A = B^t Sinv B, and
