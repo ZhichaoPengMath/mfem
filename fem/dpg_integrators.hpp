@@ -3,6 +3,7 @@
 namespace mfem
 {
 
+/* < v, [\tau \cdot n ] > */
 class DGNormalTraceJumpIntegrator : public BilinearFormIntegrator
 {
 private:
@@ -19,5 +20,27 @@ public:
 
 
 };
+/* < div u, div v >, where u and v  in DG space */
+class DGDivDivIntegrator : public BilinearFormIntegrator
+{
+protected:
+   Coefficient *Q;
 
+private:
+   Vector divshape;
+   DenseMatrix dshape;
+   DenseMatrix gshape;
+   DenseMatrix Jadj;
+
+public:
+   DGDivDivIntegrator() { Q = NULL; }
+   DGDivDivIntegrator(Coefficient &q) : Q(&q) { }
+
+   virtual void AssembleElementMatrix(const FiniteElement &el,
+                                      ElementTransformation &Trans,
+                                      DenseMatrix &elmat);
+};
+
+
+/************************************************/
 }

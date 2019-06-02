@@ -5,7 +5,7 @@
 
 namespace mfem{
 
-
+/* < v, [n \cdot \tau ] >, \tau in L2 */
 void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_face_fe,
                         const FiniteElement &test_fe1,
                         const FiniteElement &test_fe2,
@@ -97,7 +97,60 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       } /* if */
    } /* p */
 
-}/* function */
+}/* end of DGNormalJumpIntegrator */
+
+/* (div v, div w ), v and w are in DG space */
+void DGDivDivIntegrator::AssembleElementMatrix(
+   const FiniteElement &el,
+   ElementTransformation &Trans,
+   DenseMatrix &elmat)
+{
+   int dim = el.GetDim();
+   int dof = el.GetDof();
+   double c;
+
+   dshape.SetSize (dof, dim);
+   gshape.SetSize (dof, dim);
+   Jadj.SetSize (dim);
+   divshape.SetSize (dim*dof);
+
+   elmat.SetSize (dof, dim*dof);
+
+   const IntegrationRule *ir = IntRule;
+   if (ir == NULL)
+   {
+      int order = Trans.OrderGrad(&el) + el.GetOrder();
+      ir = &IntRules.Get(el.GetGeomType(), order);
+   }
+
+   elmat = 0.0;
+
+   for (int i = 0; i < ir -> GetNPoints(); i++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(i);
+
+      el.CalcDShape (ip, dshape);
+//      test_fe.CalcShape (ip, shape);
+
+      Trans.SetIntPoint (&ip);
+      CalcAdjugate(Trans.Jacobian(), Jadj);
+
+      Mult (dshape, Jadj, gshape);
+
+      gshape.GradToDiv (divshape);
+
+      c = ip.weight;
+      if (Q)
+      {
+         c *= Q -> Eval (Trans, ip);
+      }
+
+      // elmat += c * shape * divshape ^ t
+      AddMultVVt ( divshape, elmat);
+	  elmat *= c;
+   }
+} /* end of DGDivDivIntegrator */
+
 
 
 }
