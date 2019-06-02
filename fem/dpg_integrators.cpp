@@ -114,7 +114,8 @@ void DGDivDivIntegrator::AssembleElementMatrix(
    Jadj.SetSize (dim);
    divshape.SetSize (dim*dof);
 
-   elmat.SetSize (dof, dim*dof);
+   elmat.SetSize (dim*dof, dim*dof);
+   std::cout<<"dof"<<dof<<std::endl;/*debug*/
 
    const IntegrationRule *ir = IntRule;
    if (ir == NULL)

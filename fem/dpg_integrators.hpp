@@ -20,7 +20,7 @@ public:
 
 
 };
-/* < div u, div v >, where u and v  in DG space */
+/* ( div u, div v ), where u and v  in DG space */
 class DGDivDivIntegrator : public BilinearFormIntegrator
 {
 protected:
