@@ -34,6 +34,7 @@ void F2_pzc(const Vector &x, Vector & v)
 	v.SetSize(2);
 	v[0] = 1.234 * x[0]*x[0] + 2.232 * x[1];
     v[1] = 3.572 * x[0]*x[1] + 3.305 * x[1] * x[1];
+
 }
 
 double DivF2_pzc(const Vector & x)
@@ -41,17 +42,18 @@ double DivF2_pzc(const Vector & x)
 	return (2.468+3.572)*x[0] + 6.610 * x[1];
 }
 
-void GradDivF2_pzc(const Vector &x, Vector &v)
+void NGradDivF2_pzc(const Vector &x, Vector &v)
 {
 	v.SetSize(2);
 	v[0] = 2.468 + 3.572;
 	v[1] = 6.610;
+	v *= -1.;
 }
 
-void Gradf2DivF2_pzc( const Vector &x, Vector &v)
+void NGradf2DivF2_pzc( const Vector &x, Vector &v)
 {
 	v.SetSize(2);
-	GradDivF2_pzc(x,v);
+	NGradDivF2_pzc(x,v);
 	v *= f2(x);
 
 	Vector w1(2);
@@ -59,7 +61,7 @@ void Gradf2DivF2_pzc( const Vector &x, Vector &v)
 	Grad_f2(x,w1);
 	w1 *= DivF2_pzc(x);
 
-	v += w1;
+	v -= w1;
 }
 
 /*********************************
@@ -80,7 +82,7 @@ TEST_CASE("Test for the DPG integrators",
 {
    cout<<endl<<"Test Domain Integrator DGDivDivIntegrator"<<endl;
 
-   int order = 3, n = 1, dim = 2;
+   int order = 2, n = 1, dim = 2;
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
@@ -96,27 +98,47 @@ TEST_CASE("Test for the DPG integrators",
 
 	VectorFunctionCoefficient F2_coef_pzc(dim, F2_pzc);
 	FunctionCoefficient DivF2_coef_pzc(DivF2_pzc);
-	VectorFunctionCoefficient GradDivF2_coef_pzc(dim, GradDivF2_pzc);
+	VectorFunctionCoefficient NGradDivF2_coef_pzc(dim, NGradDivF2_pzc);
 
 	GridFunction f_l2(&fespace_l2); f_l2.ProjectCoefficient(F2_coef_pzc);
-	GridFunction g_l2(&fespace_l2);
 
    cout<<endl<<" coefficients obtained "<<endl;
 	SECTION("Face integrators")
 	{
-		Vector tmp_l2(fespace_l2.GetNDofs()*dim );
 		SECTION("(div v, div w), v,w in vector DG space")
 		{
+			Vector tmp_l2(fespace_l2.GetNDofs()*dim );
+			GridFunction ex_l2(&fespace_l2); ex_l2.ProjectCoefficient(NGradDivF2_coef_pzc);
+
 			BilinearForm m_l2(&fespace_l2);
 			m_l2.AddDomainIntegrator(new VectorMassIntegrator);
 			m_l2.Assemble();
 			m_l2.Finalize();
 			cout<<endl<<" Mass matrix Assembled "<<endl<<endl;
 
+			GridFunction g_l2(&fespace_l2);
 			BilinearForm blf(&fespace_l2);
 			blf.AddDomainIntegrator( new DGDivDivIntegrator() );
 			blf.Assemble();
 			blf.Finalize();
+
+
+//			FiniteElementSpace fespace_l2_scalar(&mesh, &fec_l2);
+//			Vector tmp_l2(fespace_l2.GetNDofs() );
+//			GridFunction ex_l2(&fespace_l2_scalar); ex_l2.ProjectCoefficient(DivF2_coef_pzc);
+//
+//			BilinearForm m_l2(&fespace_l2_scalar);
+//			m_l2.AddDomainIntegrator(new MassIntegrator);
+//			m_l2.Assemble();
+//			m_l2.Finalize();
+//			cout<<endl<<" Mass matrix Assembled "<<endl<<endl;
+//
+//			GridFunction g_l2(&fespace_l2_scalar);
+//			MixedBilinearForm blf(&fespace_l2,&fespace_l2_scalar);
+//			blf.AddDomainIntegrator( new VectorDivergenceIntegrator() );
+//			blf.Assemble();
+//			blf.Finalize();
+
 			
 			cout<<endl<<" Bilinear form DGDivDiv Assembled "<<endl;
 
@@ -136,12 +158,30 @@ TEST_CASE("Test for the DPG integrators",
 			g_l2 = 0.;
 			CG(m_l2, tmp_l2,  g_l2, 1, 200, cg_rtol*cg_rtol,0.0);
 
-			double error_l2 = g_l2.ComputeL2Error(GradDivF2_coef_pzc);
+			double error_l2 = g_l2.ComputeL2Error(NGradDivF2_coef_pzc);
+//			double error_l2 = g_l2.ComputeL2Error(DivF2_coef_pzc);
 			cout<<endl<<"error L2: "<<error_l2<<endl;
 
-			cout<<endl<<" calculate GradDivF2_pzc"<<endl<<endl;
-//
-            REQUIRE( g_l2.ComputeL2Error(GradDivF2_coef_pzc) < tol );
+			cout<<endl<<" calculate -GradDivF2_pzc"<<endl<<endl;
+			for( int i=0;i<g_l2.Size();i++){
+				cout<<i<<": "<<g_l2(i)<<endl;
+			}
+			cout<<endl<<" calculate -GradDivF2_pzc"<<endl<<endl;
+
+			cout<<endl<<" L2 projection of  -GradDivF2_pzc"<<endl<<endl;
+			for( int i=0;i<ex_l2.Size();i++){
+				cout<<i<<": "<<ex_l2(i)<<endl;
+			}
+
+			m_l2.Mult(ex_l2, tmp_l2);
+			cout<<endl<<"Real Righthand Side  "<<endl;
+			for(int i=0;i<tmp_l2.Size();i++){
+				cout<<i<<": "<<tmp_l2(i)<<endl;
+			}
+
+            REQUIRE( error_l2 < tol );
+//            REQUIRE( g_l2.ComputeL2Error(NGradDivF2_coef_pzc) < tol );
+ //           REQUIRE( g_l2.ComputeMaxError(NGradDivF2_coef_pzc) < tol );
 		} /* end of SECTION("(div v, div w), v,w in vector DG space") */
 	} /* end of SECTION("Face integrators") */
 

@@ -115,12 +115,11 @@ void DGDivDivIntegrator::AssembleElementMatrix(
    divshape.SetSize (dim*dof);
 
    elmat.SetSize (dim*dof, dim*dof);
-   std::cout<<"dof"<<dof<<std::endl;/*debug*/
 
    const IntegrationRule *ir = IntRule;
    if (ir == NULL)
    {
-      int order = Trans.OrderGrad(&el) + el.GetOrder();
+      int order = 2 * el.GetOrder() -2 ;
       ir = &IntRules.Get(el.GetGeomType(), order);
    }
 
@@ -130,8 +129,8 @@ void DGDivDivIntegrator::AssembleElementMatrix(
    {
       const IntegrationPoint &ip = ir->IntPoint(i);
 
+	  /* calculate divshape */
       el.CalcDShape (ip, dshape);
-//      test_fe.CalcShape (ip, shape);
 
       Trans.SetIntPoint (&ip);
       CalcAdjugate(Trans.Jacobian(), Jadj);
@@ -140,15 +139,15 @@ void DGDivDivIntegrator::AssembleElementMatrix(
 
       gshape.GradToDiv (divshape);
 
-      c = ip.weight;
+//      c = ip.weight / Trans.Weight();
+      c = ip.weight * Trans.Weight();
       if (Q)
       {
          c *= Q -> Eval (Trans, ip);
       }
 
-      // elmat += c * shape * divshape ^ t
-      AddMultVVt ( divshape, elmat);
-	  elmat *= c;
+      // elmat += c * divshape * divshape ^ t
+      AddMult_a_VVt (c, divshape, elmat);
    }
 } /* end of DGDivDivIntegrator */
 

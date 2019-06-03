@@ -35,6 +35,7 @@ set(UNIT_TESTS_SRCS
   fem/test_lin_interp.cpp
   fem/test_linear_fes.cpp
   fem/test_quadraturefunc.cpp
+  fem/test_pzc.cpp # test added by pzc
   )
 
 # All unit tests are built into a single executable 'unit_tests'.
