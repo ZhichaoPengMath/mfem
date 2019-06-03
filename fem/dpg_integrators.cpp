@@ -139,8 +139,7 @@ void DGDivDivIntegrator::AssembleElementMatrix(
 
       gshape.GradToDiv (divshape);
 
-//      c = ip.weight / Trans.Weight();
-      c = ip.weight * Trans.Weight();
+      c = ip.weight / Trans.Weight();
       if (Q)
       {
          c *= Q -> Eval (Trans, ip);

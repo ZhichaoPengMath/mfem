@@ -87,12 +87,14 @@ TEST_CASE("Test for the DPG integrators",
    double tol = 1e-9;
 
    Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
+   /* mesh [0,2] \times [0,3] */
    cout<<endl<<" mesh formed "<<endl<<endl;
 
 
    /* define the finite element space */
 	L2_FECollection fec_l2(order,dim);
 	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
+	FiniteElementSpace fespace_scalar_l2(&mesh,&fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 
@@ -101,87 +103,55 @@ TEST_CASE("Test for the DPG integrators",
 	VectorFunctionCoefficient NGradDivF2_coef_pzc(dim, NGradDivF2_pzc);
 
 	GridFunction f_l2(&fespace_l2); f_l2.ProjectCoefficient(F2_coef_pzc);
+	GridFunction divf_l2(&fespace_scalar_l2); divf_l2.ProjectCoefficient(DivF2_coef_pzc);
 
    cout<<endl<<" coefficients obtained "<<endl;
-	SECTION("Face integrators")
+	SECTION("Face integrators: DGDivDivIntegrator") 
+		/* ************************************************
+		 * compare (div F2_pzc, div basis) calculated by 
+		 * DGDivDivIntegrator(F2_pzc) and  
+		 * Transpe os VectorDivergenceIntegrator(DivF2_pzc)
+		 * ************************************************/
 	{
 		SECTION("(div v, div w), v,w in vector DG space")
 		{
-			Vector tmp_l2(fespace_l2.GetNDofs()*dim );
+			Vector tmp1_l2(fespace_l2.GetNDofs()*dim ); /* store the result of DGDivDiv */
+			Vector tmp2_l2(fespace_l2.GetNDofs()*dim ); /* store the result of VectorDivergence*/
+			Vector diff(fespace_l2.GetNDofs()*dim ); /* store the result of VectorDivergence*/
+
 			GridFunction ex_l2(&fespace_l2); ex_l2.ProjectCoefficient(NGradDivF2_coef_pzc);
 
-			BilinearForm m_l2(&fespace_l2);
-			m_l2.AddDomainIntegrator(new VectorMassIntegrator);
-			m_l2.Assemble();
-			m_l2.Finalize();
-			cout<<endl<<" Mass matrix Assembled "<<endl<<endl;
-
 			GridFunction g_l2(&fespace_l2);
+
 			BilinearForm blf(&fespace_l2);
 			blf.AddDomainIntegrator( new DGDivDivIntegrator() );
 			blf.Assemble();
 			blf.Finalize();
 
+			MixedBilinearForm blf_mfem(&fespace_l2, &fespace_scalar_l2);
+			blf_mfem.AddDomainIntegrator( new VectorDivergenceIntegrator()  );
+			blf_mfem.Assemble();
+			blf_mfem.Finalize();
 
-//			FiniteElementSpace fespace_l2_scalar(&mesh, &fec_l2);
-//			Vector tmp_l2(fespace_l2.GetNDofs() );
-//			GridFunction ex_l2(&fespace_l2_scalar); ex_l2.ProjectCoefficient(DivF2_coef_pzc);
-//
-//			BilinearForm m_l2(&fespace_l2_scalar);
-//			m_l2.AddDomainIntegrator(new MassIntegrator);
-//			m_l2.Assemble();
-//			m_l2.Finalize();
-//			cout<<endl<<" Mass matrix Assembled "<<endl<<endl;
-//
-//			GridFunction g_l2(&fespace_l2_scalar);
-//			MixedBilinearForm blf(&fespace_l2,&fespace_l2_scalar);
-//			blf.AddDomainIntegrator( new VectorDivergenceIntegrator() );
-//			blf.Assemble();
-//			blf.Finalize();
-
-			
 			cout<<endl<<" Bilinear form DGDivDiv Assembled "<<endl;
 
-			SparseMatrix matBlf = blf.SpMat();
 			cout<<endl<<" Sizes"<<endl
-				<<"DivDiv: "<< matBlf.Width()<<" X "<<matBlf.Height()<<endl
-				<<"f_l2:   "<< f_l2.Size()<<endl
-				<<"tmp_l2: "<<tmp_l2.Size()<<endl
+				<<"DivDiv:    "<< blf.SpMat().Width()<<" X "<<blf.SpMat().Height()<<endl
+				<<"VectorDiv: "<< blf_mfem.SpMat().Width()<<" X "<<blf_mfem.SpMat().Height()<<endl
+				<<"f_l2:   "<<f_l2.Size()<<endl
+				<<"divf_l2:   "<<divf_l2.Size()<<endl
+				<<"tmp_l2: "<<tmp1_l2.Size()<<endl
 				<<endl;
 
-			blf.Mult(f_l2, tmp_l2);
-			cout<<endl<<"Righthand Side Assembled "<<endl;
-			for(int i=0;i<tmp_l2.Size();i++){
-				cout<<i<<": "<<tmp_l2(i)<<endl;
-			}
+			blf.Mult(f_l2, tmp1_l2);
+			blf_mfem.MultTranspose( divf_l2, tmp2_l2);
 
-			g_l2 = 0.;
-			CG(m_l2, tmp_l2,  g_l2, 1, 200, cg_rtol*cg_rtol,0.0);
 
-			double error_l2 = g_l2.ComputeL2Error(NGradDivF2_coef_pzc);
-//			double error_l2 = g_l2.ComputeL2Error(DivF2_coef_pzc);
-			cout<<endl<<"error L2: "<<error_l2<<endl;
+			subtract(tmp1_l2,tmp2_l2,diff);
+			cout<<endl<<"norm of difference: "<<diff.Norml2()<<endl;
+			REQUIRE(diff.Norml2()<tol);
 
-			cout<<endl<<" calculate -GradDivF2_pzc"<<endl<<endl;
-			for( int i=0;i<g_l2.Size();i++){
-				cout<<i<<": "<<g_l2(i)<<endl;
-			}
-			cout<<endl<<" calculate -GradDivF2_pzc"<<endl<<endl;
 
-			cout<<endl<<" L2 projection of  -GradDivF2_pzc"<<endl<<endl;
-			for( int i=0;i<ex_l2.Size();i++){
-				cout<<i<<": "<<ex_l2(i)<<endl;
-			}
-
-			m_l2.Mult(ex_l2, tmp_l2);
-			cout<<endl<<"Real Righthand Side  "<<endl;
-			for(int i=0;i<tmp_l2.Size();i++){
-				cout<<i<<": "<<tmp_l2(i)<<endl;
-			}
-
-            REQUIRE( error_l2 < tol );
-//            REQUIRE( g_l2.ComputeL2Error(NGradDivF2_coef_pzc) < tol );
- //           REQUIRE( g_l2.ComputeMaxError(NGradDivF2_coef_pzc) < tol );
 		} /* end of SECTION("(div v, div w), v,w in vector DG space") */
 	} /* end of SECTION("Face integrators") */
 
