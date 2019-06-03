@@ -39,8 +39,32 @@ public:
    virtual void AssembleElementMatrix(const FiniteElement &el,
                                       ElementTransformation &Trans,
                                       DenseMatrix &elmat);
+ };
+
+/* -( u, grad v), u is a vector in DG space and v is a scalar in DG space */
+class DGVectorWeakDivergenceIntegrator : public BilinearFormIntegrator
+{
+protected:
+		Coefficient *Q;
+
+private:
+	   Vector shape;
+	   Vector divshape;
+
+	   DenseMatrix Jadj; 
+	   DenseMatrix dshape;
+	   DenseMatrix gshape;
+
+public:
+	   DGVectorWeakDivergenceIntegrator(){ Q = NULL; }
+	   DGVectorWeakDivergenceIntegrator(Coefficient &q){ Q = &q; }
+       DGVectorWeakDivergenceIntegrator(Coefficient *_q) { Q = _q; }
+
+	   virtual void AssembleElementMatrix2(const FiniteElement &trial_fe,
+			                              const FiniteElement &test_fe,
+										  ElementTransformation &Trans,
+										  DenseMatrix &elmat);
+
 };
-
-
 /************************************************/
 }

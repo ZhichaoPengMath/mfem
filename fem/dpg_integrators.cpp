@@ -151,5 +151,61 @@ void DGDivDivIntegrator::AssembleElementMatrix(
 } /* end of DGDivDivIntegrator */
 
 
+/* -(u,grad v), u is a vector in DG space an v is a scalar in DG space */
+/* only scalar coefficient are considered for now */
+void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElement &trial_fe,
+                      const FiniteElement &test_fe,
+					  ElementTransformation &Trans,
+					  DenseMatrix &elmat)
+{
+   int dim  = trial_fe.GetDim();
+   int trial_dof = trial_fe.GetDof();
+   int test_dof = test_fe.GetDof();
+   double c;
+
+   shape.SetSize (trial_dof);
+   dshape.SetSize (test_dof, dim);
+   gshape.SetSize (test_dof, dim);
+   Jadj.SetSize (dim);
+
+   elmat.SetSize (test_dof, dim*trial_dof);
+
+   const IntegrationRule *ir = IntRule;
+   if (ir == NULL)
+   {
+      int order = Trans.OrderGrad(&test_fe) + trial_fe.GetOrder();
+      ir = &IntRules.Get(trial_fe.GetGeomType(), order);
+   }
+
+   elmat = 0.0;
+
+   for (int i = 0; i < ir -> GetNPoints(); i++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(i);
+
+      trial_fe.CalcShape (ip, shape);
+      test_fe.CalcDShape (ip, dshape);
+
+      Trans.SetIntPoint (&ip);
+      CalcAdjugate(Trans.Jacobian(), Jadj);
+
+      Mult (dshape, Jadj, gshape);
+	  /* dense matrix gshape(i,j) = data( dof * j + i) = div(dof * j +i) */
+	  /* I guess the order of data for the trial space is the same */
+	  gshape.GradToDiv(divshape);
+
+      c = ip.weight;
+      if (Q)
+      {
+         c *= Q -> Eval (Trans, ip);
+      }
+
+      // elmat += c * shape * divshape ^ t
+      shape *= -c;
+      AddMultVWt (shape, divshape, elmat);
+   }
+
+} /* end of DGVectorWeakDivergenceIntegrator */
+
 
 }
