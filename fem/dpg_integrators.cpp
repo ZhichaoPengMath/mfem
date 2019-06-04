@@ -167,10 +167,9 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
 
    dshape.SetSize (test_dof, dim);
    gshape.SetSize (test_dof, dim);
-   vshape.SetSize (dim, trial_dof*dim);
+//   vshape.SetSize (dim, trial_dof*dim); vshape = 0.;
    Jadj.SetSize (dim);
 
-   vshape = 0.;
 
    elmat.SetSize (test_dof, dim*trial_dof);
 
@@ -189,11 +188,11 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
 
       trial_fe.CalcShape (ip, shape);
 
-	  for( int i_dim=0; i_dim<dim; i_dim++){
-			 for(int k=0;k<trial_dof;k++){
-				vshape(i_dim, i_dim * trial_dof + k) = shape(k);
-			 }
-	  } /* i_dim */
+//	  for( int i_dim=0; i_dim<dim; i_dim++){
+//			 for(int k=0;k<trial_dof;k++){
+//				vshape(i_dim, i_dim * trial_dof + k) = shape(k);
+//			 }
+//	  } /* i_dim */
 
       test_fe.CalcDShape (ip, dshape);
 
@@ -211,11 +210,15 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
       }
 
       // elmat += c * vshape * divshape ^ t
-      vshape *= -c;
-//	  std::cout<<"vector sizes"<<std::endl
-//		       << " grad: "<<gradshape.Size()<<" v: "<<vshape.Size()<<std::endl;
-//      AddMultVWt (vshape, gradshape, elmat);
-      AddMult ( gshape, vshape, elmat);
+      gshape *= -c;
+//      AddMult ( gshape, vshape, elmat);
+	 for(int k_test = 0; k_test<test_dof; k_test++){
+		for(int i_dim = 0; i_dim<dim; i_dim++){
+			for(int k_trial = 0; k_trial<trial_dof; k_trial++){
+				elmat(k_test, i_dim * trial_dof + k_trial) += shape(k_trial) * gshape(k_test,i_dim);
+			} /* k_trial */
+		} /* i_dim */
+	 } /* end of k_test */
    }
 
 } /* end of DGVectorWeakDivergenceIntegrator */

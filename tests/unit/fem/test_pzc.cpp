@@ -92,8 +92,9 @@ TEST_CASE("Test for the DPG integrators",
 
    /* define the finite element space */
 	L2_FECollection fec_l2(order,dim);
+	L2_FECollection s_fec_l2(order,dim);
 	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-	FiniteElementSpace fespace_scalar_l2(&mesh,&fec_l2);
+	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 
@@ -143,7 +144,8 @@ TEST_CASE("Test for the DPG integrators",
 				<<"VectorDiv: "<< blf_mfem.SpMat().Width()<<" X "<<blf_mfem.SpMat().Height()<<endl
 				<<"f_l2:   "<<f_l2.Size()<<endl
 				<<"divf_l2:   "<<divf_l2.Size()<<endl
-				<<"tmp_l2: "<<tmp1_l2.Size()<<endl
+				<<"tmp1_l2: "<<tmp1_l2.Size()<<endl
+				<<"tmp2_l2: "<<tmp2_l2.Size()<<endl
 				<<endl;
 
 			blf.Mult(f_l2, tmp1_l2);
@@ -180,7 +182,8 @@ TEST_CASE("Test for the DPG integrators",
 				<<"WeakDivergence "<< blf.SpMat().Width()<<" X "<<blf.SpMat().Height()<<endl
 				<<"f2_l2:   "<<f2_l2.Size()<<endl
 				<<"gradf2_l2:   "<<gradf2_l2.Size()<<endl
-				<<"tmp_l2: "<<tmp1_l2.Size()<<endl
+				<<"tmp1_l2: "<<tmp1_l2.Size()<<endl
+				<<"tmp2_l2: "<<tmp2_l2.Size()<<endl
 				<<endl;
 
 

@@ -49,13 +49,11 @@ protected:
 
 private:
 	   Vector shape;
-//	   Vector vshape;
-//	   Vector gradshape;
 
 	   DenseMatrix Jadj; 
 	   DenseMatrix dshape;
 	   DenseMatrix gshape;
-	   DenseMatrix vshape;
+//	   DenseMatrix vshape;
 
 public:
 	   DGVectorWeakDivergenceIntegrator(){ Q = NULL; }
