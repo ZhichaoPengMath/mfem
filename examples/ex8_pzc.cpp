@@ -41,6 +41,8 @@ using namespace mfem;
 double f_exact(const Vector & x);
 double u_exact(const Vector & x);
 
+void q_exact(const Vector & x,Vector & f);
+
 double alpha_pzc = 100.;
 
 int main(int argc, char *argv[])
@@ -185,6 +187,7 @@ int main(int argc, char *argv[])
    GridFunction x0;
    x0.MakeRef(x0_space, x.GetBlock(x0_var), 0);
    x0.ProjectCoefficient(u_coeff);
+//   x0.ProjectBdrCoefficient(u_coeff,ess_bdr);
 
    // 7. Set up the mixed bilinear form for the primal trial unknowns, B0,
    //    the mixed bilinear form for the interfacial unknowns, Bhat,
@@ -311,6 +314,7 @@ int main(int argc, char *argv[])
       socketstream sol_sock(vishost, visport);
       sol_sock.precision(8);
       sol_sock << "solution\n" << *mesh << x0 << flush;
+
    }
 
    // 13. Free the used memory.
@@ -338,9 +342,9 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
+//		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
+//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
+//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
 
 		return M_PI * M_PI * ( sin(M_PI*x(0) ) + sin( M_PI*x(1) ) ); /* first index is 0 */
 		return M_PI * M_PI *sin( M_PI*x(1) ); /* first index is 0 */
@@ -361,7 +365,7 @@ double f_exact(const Vector & x){
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return  sin( M_PI * x(1) ); /* first index is 0 */
-		return atan(alpha_pzc * x(1) );
+//		return atan(alpha_pzc * x(1) );
 		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
 		return 10. +  sin( M_PI * x(1) ); /* first index is 0 */
 //		return sin(2.*M_PI* x(0) ) + sin(2.*M_PI * x(1) ); /* first index is 0 */
@@ -376,3 +380,21 @@ double u_exact(const Vector & x){
 
 }
 
+void q_exact( const Vector & x, Vector & f){
+	if(x.Size() == 2){
+//		f(0) = 0.;
+//		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * x(1) * x(1) );
+		
+		f(0) = M_PI * cos(M_PI*x(0) );
+		f(1) = M_PI * cos(M_PI*x(1) );
+	}
+	else if(x.Size() == 1){
+		f(0) = 2.*M_PI*cos(2. * M_PI * x(0) );
+	}
+	else{
+		f(0) = 0.;
+		f(1) = 0.;
+		f(2) = 0.;
+	}
+
+}
