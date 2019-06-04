@@ -164,9 +164,13 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
    double c;
 
    shape.SetSize (trial_dof);
+
    dshape.SetSize (test_dof, dim);
    gshape.SetSize (test_dof, dim);
+   vshape.SetSize (dim, trial_dof*dim);
    Jadj.SetSize (dim);
+
+   vshape = 0.;
 
    elmat.SetSize (test_dof, dim*trial_dof);
 
@@ -184,6 +188,13 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
       const IntegrationPoint &ip = ir->IntPoint(i);
 
       trial_fe.CalcShape (ip, shape);
+
+	  for( int i_dim=0; i_dim<dim; i_dim++){
+			 for(int k=0;k<trial_dof;k++){
+				vshape(i_dim, i_dim * trial_dof + k) = shape(k);
+			 }
+	  } /* i_dim */
+
       test_fe.CalcDShape (ip, dshape);
 
       Trans.SetIntPoint (&ip);
@@ -191,8 +202,7 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
 
       Mult (dshape, Jadj, gshape);
 	  /* dense matrix gshape(i,j) = data( dof * j + i) = div(dof * j +i) */
-	  /* I guess the order of data for the trial space is the same */
-	  gshape.GradToDiv(divshape);
+//	  gshape.GradToDiv(gradshape);
 
       c = ip.weight;
       if (Q)
@@ -200,9 +210,12 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
          c *= Q -> Eval (Trans, ip);
       }
 
-      // elmat += c * shape * divshape ^ t
-      shape *= -c;
-      AddMultVWt (shape, divshape, elmat);
+      // elmat += c * vshape * divshape ^ t
+      vshape *= -c;
+//	  std::cout<<"vector sizes"<<std::endl
+//		       << " grad: "<<gradshape.Size()<<" v: "<<vshape.Size()<<std::endl;
+//      AddMultVWt (vshape, gradshape, elmat);
+      AddMult ( gshape, vshape, elmat);
    }
 
 } /* end of DGVectorWeakDivergenceIntegrator */

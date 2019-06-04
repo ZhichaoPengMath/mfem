@@ -75,9 +75,8 @@ TEST_CASE("Test this file is correctly linked",
 } /* end of test */
 
 TEST_CASE("Test for the DPG integrators",
-		  "[DPGIntegrator]"
+		  "[DPGFaceIntegrator]"
 		  "[pzc]"
-		  "[DGDivDivIntegrator]"
 		)
 {
    cout<<endl<<"Test Domain Integrator DGDivDivIntegrator"<<endl;
@@ -101,11 +100,15 @@ TEST_CASE("Test for the DPG integrators",
 	VectorFunctionCoefficient F2_coef_pzc(dim, F2_pzc);
 	FunctionCoefficient DivF2_coef_pzc(DivF2_pzc);
 	VectorFunctionCoefficient NGradDivF2_coef_pzc(dim, NGradDivF2_pzc);
+	FunctionCoefficient f2_coef(f2);
+	VectorFunctionCoefficient Grad_f2_coef(dim, Grad_f2);
 
 	GridFunction f_l2(&fespace_l2); f_l2.ProjectCoefficient(F2_coef_pzc);
 	GridFunction divf_l2(&fespace_scalar_l2); divf_l2.ProjectCoefficient(DivF2_coef_pzc);
+	GridFunction gradf2_l2(&fespace_l2); gradf2_l2.ProjectCoefficient(Grad_f2_coef);
+	GridFunction f2_l2(&fespace_scalar_l2); f2_l2.ProjectCoefficient(f2_coef);
 
-   cout<<endl<<" coefficients obtained "<<endl;
+    cout<<endl<<" coefficients obtained "<<endl;
 	SECTION("Face integrators: DGDivDivIntegrator") 
 		/* ************************************************
 		 * compare (div F2_pzc, div basis) calculated by 
@@ -150,6 +153,55 @@ TEST_CASE("Test for the DPG integrators",
 			subtract(tmp1_l2,tmp2_l2,diff);
 			cout<<endl<<"norm of difference: "<<diff.Norml2()<<endl;
 			REQUIRE(diff.Norml2()<tol);
+
+			cout<<endl<<endl<<endl
+				<<"+++++++++++++++++++++++++++++++++"<<endl
+				<<" test for DGDivDiv complete"<<endl
+				<<"+++++++++++++++++++++++++++++++++"<<endl
+				<<endl;
+
+
+		} /* end of SECTION("(div v, div w), v,w in vector DG space") */
+		SECTION("-(u, grad v), u in vector DG space, v scalar DG space")
+		{
+			Vector tmp1_l2(fespace_l2.GetNDofs()*dim ); /* store the result of DGMixedVectorWeakDivergence */
+			Vector tmp2_l2(fespace_l2.GetNDofs()*dim ); /* store the result of VectorMassIntegrator*/
+			Vector diff(fespace_l2.GetNDofs()*dim ); /* store the result of VectorDivergence*/
+
+			GridFunction g_l2(&fespace_l2);
+
+			MixedBilinearForm blf(&fespace_l2,&fespace_scalar_l2);
+			blf.AddDomainIntegrator( new DGVectorWeakDivergenceIntegrator() );
+			blf.Assemble();
+			blf.Finalize();
+
+			cout<<endl<<" DGVectorWeakDivergenceIntegrator assembled"<<endl;
+			cout<<endl<<" Sizes"<<endl
+				<<"WeakDivergence "<< blf.SpMat().Width()<<" X "<<blf.SpMat().Height()<<endl
+				<<"f2_l2:   "<<f2_l2.Size()<<endl
+				<<"gradf2_l2:   "<<gradf2_l2.Size()<<endl
+				<<"tmp_l2: "<<tmp1_l2.Size()<<endl
+				<<endl;
+
+
+			blf.MultTranspose( f2_l2, tmp1_l2);
+
+			BilinearForm blf_mfem(&fespace_l2);
+			blf_mfem.AddDomainIntegrator( new VectorMassIntegrator()  );
+			blf_mfem.Assemble();
+			blf_mfem.Finalize();
+
+			blf_mfem.Mult( gradf2_l2, tmp2_l2);
+
+			add(tmp1_l2,tmp2_l2,diff);
+			cout<<endl<<"norm of difference: "<<diff.Norml2()<<endl;
+			REQUIRE(diff.Norml2()<tol);
+
+			cout<<endl<<endl<<endl
+				<<"+++++++++++++++++++++++++++++++++"<<endl
+				<<" test for DGMixedVectorWeakDivergence complete"<<endl
+				<<"+++++++++++++++++++++++++++++++++"<<endl
+				<<endl;
 
 
 		} /* end of SECTION("(div v, div w), v,w in vector DG space") */
