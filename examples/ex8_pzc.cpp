@@ -229,6 +229,11 @@ int main(int argc, char *argv[])
    SparseMatrix &matSinv = Sinv->SpMat();
    SparseMatrix &matS0   = S0->SpMat();
 
+    cout<<endl<<"matrix dimensions: "<<endl
+	   <<" B0:   "<<matB0.Width()<<" X "<< matB0.Height()<<endl
+	   <<" Bhat: "<<matBhat.Width()<<" X "<< matBhat.Height()<<endl
+	   <<" Sinv: "<<matSinv.Width()<<" X "<< matSinv.Height()<<endl;
+
    // 8. Set up the 1x2 block Least Squares DPG operator, B = [B0  Bhat],
    //    the normal equation operator, A = B^t Sinv B, and
    //    the normal equation right-hand-size, b = B^t Sinv F.
@@ -342,6 +347,7 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
+		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
@@ -366,6 +372,7 @@ double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return  sin( M_PI * x(1) ); /* first index is 0 */
 //		return atan(alpha_pzc * x(1) );
+		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
 		return 10. +  sin( M_PI * x(1) ); /* first index is 0 */
 //		return sin(2.*M_PI* x(0) ) + sin(2.*M_PI * x(1) ); /* first index is 0 */

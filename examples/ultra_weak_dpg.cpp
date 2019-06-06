@@ -17,11 +17,11 @@
 //               Petrov-Galerkin (DPG) method in its ultra-weak form
 //						-\Laplace u = f with Dirichlet boundary condition
 //				 Rewrite the equation in its first order form
-//						   q  =  \grad u
-//					  -div(q) =  f
+//					  q + \grad u = 0
+//					  div(q) =  f
 //				 Variational form:
-//						( q, v ) - (u, div(v) ) + \lgl \hat{u}, v\cdot n \rgl = 0
-//						( q, \grad \tau) - \lgl \hat{q}, \tau \rgl  = f
+//						 ( q, \tau ) - (u, div(\tau) ) + \lgl \hat{u}, \tau\cdot n \rgl = 0
+//						-( q, \grad v) + \lgl \hat{q}, v \rgl  = f
 //				 here, \hat{q} \approx q\cdot n
 //				 Trial space:
 //					Interior terms:
@@ -50,6 +50,7 @@ using namespace mfem;
 
 double f_exact(const Vector & x);
 double u_exact(const Vector & x);
+void  zero_fun(const Vector & x, Vector & f);
 
 double alpha_pzc = 100.;
 
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
    unsigned int rt_trace_order = order;
    unsigned int test_order = order + dim;
 
-   FiniteElementCollection * u0_fec, * q0_fec, * uhat_fec, *qhat_fec, * test_fec;
+   FiniteElementCollection * u0_fec, * q0_fec, * uhat_fec, *qhat_fec, * vtest_fec, * stest_fec;
 
    u0_fec = new L2_FECollection(trial_order,dim);
    q0_fec = new L2_FECollection(trial_order,dim);
@@ -136,15 +137,18 @@ int main(int argc, char *argv[])
    uhat_fec = new H1_Trace_FECollection(h1_trace_order,dim);
    qhat_fec = new RT_Trace_FECollection(rt_trace_order,dim);
 
-   test_fec = new L2_FECollection(test_order,dim);
+   vtest_fec = new L2_FECollection(test_order,dim); 
+   stest_fec = new L2_FECollection(test_order,dim); /* in general the vector test space for \tau
+													   and the scalar test space for v can be
+													   polynomial space with different order */
 
    FiniteElementSpace * u0_space = new FiniteElementSpace(mesh, u0_fec);
    FiniteElementSpace * q0_space = new FiniteElementSpace(mesh, q0_fec, dim);
    FiniteElementSpace * uhat_space = new FiniteElementSpace(mesh, uhat_fec);
    FiniteElementSpace * qhat_space = new FiniteElementSpace(mesh, qhat_fec);
    
-   FiniteElementSpace * vtest_space = new FiniteElementSpace(mesh, test_fec,dim);
-   FiniteElementSpace * stest_space = new FiniteElementSpace(mesh, test_fec);
+   FiniteElementSpace * vtest_space = new FiniteElementSpace(mesh, vtest_fec,dim);
+   FiniteElementSpace * stest_space = new FiniteElementSpace(mesh, stest_fec);
    
 
    // 5. Define the block structure of the problem, by creating the offset
@@ -152,10 +156,10 @@ int main(int argc, char *argv[])
    //    and rhs.
    enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
 
-   int size_u0 = u0_space->GetVSize();
    int size_q0 = q0_space->GetVSize();
-   int size_uhat = uhat_space->GetVSize();
+   int size_u0 = u0_space->GetVSize();
    int size_qhat = qhat_space->GetVSize();
+   int size_uhat = uhat_space->GetVSize();
    int size_vtest = vtest_space->GetVSize();
    int size_stest = stest_space->GetVSize();
 
@@ -191,46 +195,51 @@ int main(int argc, char *argv[])
    F = 0.;
 
    ConstantCoefficient one(1.0);          /* coefficients */
-   ConstantCoefficient zero(0.);          /* coefficients */
+   VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
    FunctionCoefficient f_coeff( f_exact );/* coefficients */
    FunctionCoefficient u_coeff( u_exact );/* coefficients */
 
-//   LinearForm * fq(new LinearForm);
-//   fq->Update(vtest_space, F.GetBlock(0) ,0);
-//   fq->AddDomainIntegrator(new DomainLFIntegrator( zero ) );
-//   fq->Assemble();
+   /* rhs for (q,\tau) - (u,\div(\tau) ) + \lgl hhat,\tau\cdot n \rgl = 0 */
+   LinearForm * f_grad(new LinearForm);
+   f_grad->Update(vtest_space, F.GetBlock(0) ,0);
+   f_grad->AddDomainIntegrator(new VectorDomainLFIntegrator( vec_zero ) );
+   f_grad->Assemble();
 
-   LinearForm * fu(new LinearForm);
-   fu->Update(stest_space, F.GetBlock(1) ,0);
-   fu->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
-   fu->Assemble();
+   /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
+   LinearForm * f_div(new LinearForm);
+   f_div->Update(stest_space, F.GetBlock(1) ,0);
+   f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
+   f_div->Assemble();
 
    // 6. Deal with boundary conditions
    //    Dirichlet boundary condition is imposed throught trace term  \hat{u}
-   Array<int> ess_bdr(mesh->bdr_attributes.Max());
-   ess_bdr = 1;
-
-   Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
-   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list);
-
-   cout<<endl<<endl<<"Boundary information: "<<endl;
-   cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
-   cout<<" number of essential true dofs "<<ess_trace_dof_list.Size()<<endl;
-
-   GridFunction uhat;
-   uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
-   uhat.ProjectBdrCoefficient(u_coeff,ess_trace_dof_list);
+//   Array<int> ess_bdr(mesh->bdr_attributes.Max());
+//   ess_bdr = 1;
+//
+//   Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
+//   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list);
+//
+//   cout<<endl<<endl<<"Boundary information: "<<endl;
+//   cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
+//   cout<<" number of essential true dofs "<<ess_trace_dof_list.Size()<<endl;
+//
+//   GridFunction uhat;
+//   uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
+//   uhat.ProjectBdrCoefficient(u_coeff,ess_trace_dof_list);
 
    // 7. Set up the mixed bilinear forms 
-   //    B_mass_q: (q,v)
-   //    B_u_dot_div: (u, div(v) ) 
-   //    B_u_normal_jump:  \lgl \hat{u} , v\cdot n\rgl
+   //    B_mass_q: (q,\tau)
+   //    B_u_dot_div: (u, div(\tau) ) 
+   //    B_u_normal_jump:  \lgl \hat{u} , \tau\cdot n\rgl
    //
-   //	 B_q_grad: (q, \grad \tau)
-   //	 B_q_jump: \lgl \hat{q}, \tau \rgl
+   //	 B_q_weak_div: -(q, \grad v)
+   //	 B_q_jump: \lgl \hat{q}, v \rgl
    //
-   //    the inverse stiffness matrix on the discontinuous test space, Sinv,
-   //    and the stiffness matrix on the continuous trial space, S0.
+   //    the inverse energy matrix on the discontinuous test space,
+   //    Vinv, Sinv
+   //    and the energy matrix on the continuous trial space, S0.
+   //    V corresponding to ||\tau||^2 + || div(\tau) ||^2
+   //    S corresponding to ||v||^2 + || \grad(v) ||^2
    
    /* operator (q,v) */
    MixedBilinearForm *B_mass_q = new MixedBilinearForm(q0_space,vtest_space);
@@ -238,7 +247,7 @@ int main(int argc, char *argv[])
    B_mass_q->Assemble();
    B_mass_q->Finalize();
 
-   cout<<endl<< "(q,v) assembled"<<endl;
+   cout<<endl<< "(q,tau) assembled"<<endl;
 
    /* operator ( u , div(v) ) */
    /* Vector DivergenceIntegrator(): (div(u), v), where u is a vector and v is a scalar*/
@@ -249,117 +258,172 @@ int main(int argc, char *argv[])
 								   );
    B_u_dot_div->Assemble();
    B_u_dot_div->Finalize();
-   cout<< "( u, div(v) ) assembled"<<endl;
+   cout<< "( u, div(tau) ) assembled"<<endl;
 
-   /* operator \lgl u, v\cdot n rgl */
+   /* operator \lgl u, \tau\cdot n rgl */
    MixedBilinearForm *B_u_normal_jump = new MixedBilinearForm(uhat_space, vtest_space);
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
-   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
+//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
 
-   cout<<endl<<"< u, v cdot n > assembled"<<endl;
+   cout<<endl<<"< u, tau cdot n > assembled"<<endl;
 
-   /* operator  (div q, \tau) */
-   MixedBilinearForm * B_q_div = new MixedBilinearForm(q0_space,stest_space);
-   B_q_div->AddDomainIntegrator( new VectorDivergenceIntegrator() );
-   B_q_div->Assemble();
-   B_q_div->Finalize();
+   /* operator  -( q, \grad v) */
+   MixedBilinearForm * B_q_weak_div = new MixedBilinearForm(q0_space, stest_space);
+   B_q_weak_div->AddDomainIntegrator(new DGVectorWeakDivergenceIntegrator( ) );
+   B_q_weak_div->Assemble();
+   B_q_weak_div->Finalize();
 
-   cout<<endl<<"( div(q), v ) assembled"<<endl;
+   cout<<endl<<"-(q, grad(v)  ) assembled"<<endl;
 
-   /* mass matrix corresponding to the test norm */
-   BilinearForm *inv_vtest = new BilinearForm(vtest_space);
-   SumIntegrator *vsum = new SumIntegrator;
-//   vsum->AddIntegrator
+   /* operator < u_hat,v> */
+   MixedBilinearForm *B_q_jump = new MixedBilinearForm(qhat_space, stest_space);
+   B_q_jump->AddTraceFaceIntegrator( new TraceJumpIntegrator() );
+   B_q_jump->Assemble();
+   B_q_jump->Finalize();
 
+   cout<<endl<<"< q, v > assembled"<<endl;
 
    /* size of matrices */
    SparseMatrix &matB_mass_q = B_mass_q->SpMat();
    SparseMatrix &matB_u_dot_div = B_u_dot_div->SpMat();
    SparseMatrix &matB_u_normal_jump = B_u_normal_jump->SpMat();
-   SparseMatrix &matB_q_div = B_q_div->SpMat();
+   SparseMatrix &matB_q_weak_div = B_q_weak_div->SpMat();
+   SparseMatrix &matB_q_jump = B_q_jump->SpMat();
 
+   /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
+   BilinearForm *Vinv = new BilinearForm(vtest_space);
+   SumIntegrator *VSum = new SumIntegrator;
+   VSum->AddIntegrator(new VectorMassIntegrator() );
+   VSum->AddIntegrator(new DGDivDivIntegrator() );
+   Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
+   Vinv->Assemble();
+   Vinv->Finalize();
+
+   BilinearForm *Sinv = new BilinearForm(stest_space);
+   SumIntegrator *SSum = new SumIntegrator;
+   SSum->AddIntegrator(new MassIntegrator(one) );
+   SSum->AddIntegrator(new DiffusionIntegrator(one));
+   Sinv->AddDomainIntegrator(new InverseIntegrator(SSum));
+   Sinv->Assemble();
+   Sinv->Finalize();
+
+   SparseMatrix &matVinv = Vinv->SpMat();
+   SparseMatrix &matSinv = Sinv->SpMat();
+	
    cout<<endl<<endl<<"matrix dimensions: "<<endl
 	   <<" mass_q:        "<<matB_mass_q.Width()   <<" X "<<matB_mass_q.Height()<<endl
 	   <<" u_dot_div:     "<<matB_u_dot_div.Width()<<" X "<<matB_u_dot_div.Height()<<endl
 	   <<" u_normal_jump: "<<matB_u_normal_jump.Width()<<" X "<<matB_u_normal_jump.Height()<<endl
-	   <<" q_div:         "<<matB_q_div.Width()<<" X "<<matB_q_div.Height()<<endl;
+	   <<" q_weak_div:    "<<matB_q_weak_div.Width()<<" X "<<matB_q_weak_div.Height()<<endl
+	   <<" q_jump:        "<<matB_q_jump.Width()<<" X "<<matB_q_jump.Height()<<endl;
+    cout<<endl<<"matrix in test space: "<<endl
+	   <<" V_inv:         "<<matVinv.Width()<<" X "<< matVinv.Height()<<endl
+	   <<" S_inv:         "<<matSinv.Width()<<" X "<< matSinv.Height()<<endl;
 
+   // 8. Set up the 1x2 block Least Squares DPG operator, 
+   //    the normal equation operator, A = B^t InverseGram B, and
+   //    the normal equation right-hand-size, b = B^t InverseGram F.
+   //
+   //    B = mass_q     -u_dot_div 0        u_normal_jump
+   //        q_weak_div  0         q_jump   0
+   BlockOperator B(offsets_test, offsets);
+   B.SetBlock(0,0,&matB_mass_q);
+   B.SetBlock(0,1,&matB_u_dot_div);
+   B.SetBlock(0,3,&matB_u_normal_jump);
 
+   B.SetBlock(1,0,&matB_q_weak_div);
+   B.SetBlock(1,2,&matB_q_jump);
 
-//   /* mass matrix corresponding to the test norm */
-//   BilinearForm *Sinv = new BilinearForm(test_space);
-//   SumIntegrator *Sum = new SumIntegrator;
-//   Sum->AddIntegrator(new DiffusionIntegrator(one));
-//   Sum->AddIntegrator(new MassIntegrator(one));
-//   Sinv->AddDomainIntegrator(new InverseIntegrator(Sum));
-//   Sinv->Assemble();
-//   Sinv->Finalize();
-//
-//   /* diffusion integrator in trial space */
-//   BilinearForm *S0 = new BilinearForm(x0_space);
-//   S0->AddDomainIntegrator(new DiffusionIntegrator(one));
-//   S0->Assemble();
-//   S0->EliminateEssentialBC(ess_bdr);
-//   S0->Finalize();
-//
-//   SparseMatrix &matB0   = B0->SpMat();
-//   SparseMatrix &matBhat = Bhat->SpMat();
-//   SparseMatrix &matSinv = Sinv->SpMat();
-//   SparseMatrix &matS0   = S0->SpMat();
-//
-//   // 8. Set up the 1x2 block Least Squares DPG operator, B = [B0  Bhat],
-//   //    the normal equation operator, A = B^t Sinv B, and
-//   //    the normal equation right-hand-size, b = B^t Sinv F.
-//   BlockOperator B(offsets_test, offsets);
-//   B.SetBlock(0,0,&matB0);
-//   B.SetBlock(0,1,&matBhat);
-//   RAPOperator A(B, matSinv, B);
-//   {
-//      Vector SinvF(s_test);
-//      matSinv.Mult(F,SinvF);
-//      B.MultTranspose(SinvF, b);
-//   }
-//
-//   // 9. Set up a block-diagonal preconditioner for the 2x2 normal equation
-//   //
-//   //        [ S0^{-1}     0     ]
-//   //        [   0     Shat^{-1} ]      Shat = (Bhat^T Sinv Bhat)
-//   //
-//   //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
-//   SparseMatrix * Shat = RAP(matBhat, matSinv, matBhat);
-//
-//#ifndef MFEM_USE_SUITESPARSE
-//   const double prec_rtol = 1e-3;
-//   const int prec_maxit = 200;
-//   CGSolver *S0inv = new CGSolver;
-//   S0inv->SetOperator(matS0);
-//   S0inv->SetPrintLevel(-1);
-//   S0inv->SetRelTol(prec_rtol);
-//   S0inv->SetMaxIter(prec_maxit);
-//   CGSolver *Shatinv = new CGSolver;
-//   Shatinv->SetOperator(*Shat);
-//   Shatinv->SetPrintLevel(-1);
-//   Shatinv->SetRelTol(prec_rtol);
-//   Shatinv->SetMaxIter(prec_maxit);
-//   // Disable 'iterative_mode' when using CGSolver (or any IterativeSolver) as
-//   // a preconditioner:
-//   S0inv->iterative_mode = false;
-//   Shatinv->iterative_mode = false;
-//#else
-//   Operator *S0inv = new UMFPackSolver(matS0);
-//   Operator *Shatinv = new UMFPackSolver(*Shat);
-//#endif
-//
-//   BlockDiagonalPreconditioner P(offsets);
-//   P.SetDiagonalBlock(0, S0inv);
-//   P.SetDiagonalBlock(1, Shatinv);
-//
+   BlockOperator InverseGram(offsets_test, offsets_test);
+   InverseGram.SetBlock(0,0,Vinv);
+   InverseGram.SetBlock(1,1,Sinv);
+
+   RAPOperator A(B, InverseGram, B);
+
+   /* calculate right hand side b = B^T InverseGram F */
+   {
+		Vector IGF(size_vtest + size_stest);
+		InverseGram.Mult(F,IGF);
+		B.MultTranspose(IGF,b);
+
+   }
+   // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
+   //   V0
+   //			S0 
+   //					Vhat
+   //							Shat
+   //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
+   BilinearForm *V0 = new BilinearForm(q0_space);
+   V0->AddDomainIntegrator(new VectorDiffusionIntegrator(one));
+   V0->Assemble();
+   V0->Finalize();
+
+   BilinearForm *S0 = new BilinearForm(u0_space);
+   S0->AddDomainIntegrator(new DiffusionIntegrator(one));
+   S0->Assemble();
+   S0->Finalize();
+   
+   SparseMatrix & matV0 = V0->SpMat();
+   SparseMatrix & matS0 = S0->SpMat();
+   SparseMatrix * Vhat  = RAP(matB_q_jump, matSinv, matB_q_jump);
+   SparseMatrix * Shat  = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+#ifndef MFEM_USE_SUITESPARSE
+   const double prec_rtol = 1e-3;
+   const int prec_maxit = 200;
+
+   CGSolver *V0inv = new CGSolver;
+   V0inv->SetOperator(matV0);
+   V0inv->SetPrintLevel(-1);
+   V0inv->SetRelTol(prec_rtol);
+   V0inv->SetMaxIter(prec_maxit);
+
+   CGSolver *S0inv = new CGSolver;
+   S0inv->SetOperator(matS0);
+   S0inv->SetPrintLevel(-1);
+   S0inv->SetRelTol(prec_rtol);
+   S0inv->SetMaxIter(prec_maxit);
+
+   CGSolver *Vhatinv = new CGSolver;
+   Vhatinv->SetOperator(*Vhat);
+   Vhatinv->SetPrintLevel(-1);
+   Vhatinv->SetRelTol(prec_rtol);
+   Vhatinv->SetMaxIter(prec_maxit);
+
+   CGSolver *Shatinv = new CGSolver;
+   Shatinv->SetOperator(*Shat);
+   Shatinv->SetPrintLevel(-1);
+   Shatinv->SetRelTol(prec_rtol);
+   Shatinv->SetMaxIter(prec_maxit);
+
+   // Disable 'iterative_mode' when using CGSolver (or any IterativeSolver) as
+   // a preconditioner:
+   V0inv->iterative_mode = false;
+   S0inv->iterative_mode = false;
+   Vhatinv->iterative_mode = false;
+   Shatinv->iterative_mode = false;
+#else
+   Operator *V0inv = new UMFPackSolver(matV0);
+   Operator *Vhatinv = new UMFPackSolver(*Vhat);
+
+   Operator *S0inv = new UMFPackSolver(matS0);
+   Operator *Shatinv = new UMFPackSolver(*Shat);
+#endif
+   BlockDiagonalPreconditioner P(offsets);
+   P.SetDiagonalBlock(0, V0inv);
+   P.SetDiagonalBlock(1, S0inv);
+   P.SetDiagonalBlock(2, Vhatinv);
+   P.SetDiagonalBlock(3, Shatinv);
+
 //   // 10. Solve the normal equation system using the PCG iterative solver.
 //   //     Check the weighted norm of residual for the DPG least square problem.
 //   //     Wrap the primal variable in a GridFunction for visualization purposes.
+     GMRES(A, P, b, x, 1, 1000, 1000, 1e-12, 0.0);
 //   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
+
+   GridFunction u0;
+   u0.MakeRef(u0_space, x.GetBlock(u0_var), 0);
 //
 //   {
 //      Vector LSres(s_test);
@@ -370,32 +434,32 @@ int main(int argc, char *argv[])
 //   }
 //
 //   // 10b. error 
-//   cout<< "\n dimension: "<<dim<<endl;
-//   cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
-//   cout << "\n|| u_h - u ||_{L^2} = " << x0.ComputeL2Error(u_coeff) << '\n' << endl;
+   cout<< "\n dimension: "<<dim<<endl;
+   cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
+   cout << "\n|| u_h - u ||_{L^2} = " << u0.ComputeL2Error(u_coeff) << '\n' << endl;
 //
 //
-//   // 11. Save the refined mesh and the solution. This output can be viewed
-//   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
-//   {
-//      ofstream mesh_ofs("refined.mesh");
-//      mesh_ofs.precision(8);
-//      mesh->Print(mesh_ofs);
-//      ofstream sol_ofs("sol.gf");
-//      sol_ofs.precision(8);
-//      x0.Save(sol_ofs);
-//   }
-//
-//   // 12. Send the solution by socket to a GLVis server.
-//   if (visualization)
-//   {
-//      char vishost[] = "localhost";
-//      int  visport   = 19916;
-//      socketstream sol_sock(vishost, visport);
-//      sol_sock.precision(8);
-//      sol_sock << "solution\n" << *mesh << x0 << flush;
-//   }
-//
+   // 11. Save the refined mesh and the solution. This output can be viewed
+   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
+   {
+      ofstream mesh_ofs("refined.mesh");
+      mesh_ofs.precision(8);
+      mesh->Print(mesh_ofs);
+      ofstream sol_ofs("sol.gf");
+      sol_ofs.precision(8);
+      u0.Save(sol_ofs);
+   }
+
+   // 12. Send the solution by socket to a GLVis server.
+   if (visualization)
+   {
+      char vishost[] = "localhost";
+      int  visport   = 19916;
+      socketstream sol_sock(vishost, visport);
+      sol_sock.precision(8);
+      sol_sock << "solution\n" << *mesh << u0 << flush;
+   }
+
 //   // 13. Free the used memory.
 //   delete S0inv;
 //   delete Shatinv;
@@ -421,12 +485,7 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
-
-		return M_PI * M_PI * ( sin(M_PI*x(0) ) + sin( M_PI*x(1) ) ); /* first index is 0 */
-		return M_PI * M_PI *sin( M_PI*x(1) ); /* first index is 0 */
+		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 	}
 	else if(x.Size() == 1){
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
@@ -443,11 +502,7 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-//		return  sin( M_PI * x(1) ); /* first index is 0 */
-		return atan(alpha_pzc * x(1) );
-		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
-		return 10. +  sin( M_PI * x(1) ); /* first index is 0 */
-//		return sin(2.*M_PI* x(0) ) + sin(2.*M_PI * x(1) ); /* first index is 0 */
+		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
 //		return atan(alpha_pzc * x(0) );
@@ -457,5 +512,10 @@ double u_exact(const Vector & x){
 		return 0;
 	}
 
+}
+
+/* vector 0 */
+void zero_fun(const Vector & x, Vector & f){
+	f = 0.;
 }
 
