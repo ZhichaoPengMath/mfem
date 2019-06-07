@@ -12,6 +12,7 @@
 // Implementation of GridFunction
 
 #include "gridfunc.hpp"
+#include "dpg_integrators.hpp"
 #include "../mesh/nurbs.hpp"
 #include "../general/text.hpp"
 
@@ -22,10 +23,43 @@
 #include <iostream>
 #include <algorithm>
 
+/*(1)  ProjectCoefficientSkeletonDG borrowed from HDG branch,
+ * used for the oundary elimination through trace term, and 
+ * debug with manufacture solution */
 namespace mfem
 {
 
 using namespace std;
+
+/* HDG */
+/* For the boundary elimination */
+void GridFunction::ProjectCoefficientSkeletonDG(Coefficient &coeff)
+{
+   Array<int> vdofs;
+   Vector vals, local_rhs, shape;
+   DenseMatrix local_mtx;
+   Mesh *mesh = fes->GetMesh();
+   int nfaces = mesh->GetNumFaces();
+   FaceElementTransformations *ftr;
+   SkeletonMassIntegrator Mi;
+   SkeletonMassIntegratorRHS MiRHS(coeff);
+
+   for (int i = 0; i < nfaces; i++)
+   {
+      ftr = mesh->GetFaceElementTransformations(i);
+      Mi.AssembleFaceMatrix(*fes->GetFaceElement(i),
+                            *ftr, local_mtx);
+      MiRHS.AssembleRHSElementVect(*fes->GetFaceElement(i),
+                                   *ftr, local_rhs);
+      fes->GetFaceVDofs(i, vdofs);
+      vals.SetSize(vdofs.Size());
+
+      local_mtx.Invert();
+      local_mtx.Mult(local_rhs, vals);
+      SetSubVector(vdofs, vals);
+   }
+}
+/***********************************************/
 
 GridFunction::GridFunction(Mesh *m, std::istream &input)
    : Vector()
@@ -1888,6 +1922,8 @@ void GridFunction::ProjectBdrCoefficientTangent(
    }
 #endif
 }
+
+/* dpg, pzc: compute face L2 error */
 
 double GridFunction::ComputeL2Error(
    Coefficient *exsol[], const IntegrationRule *irs[]) const

@@ -7,7 +7,10 @@
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
 // terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// Software Foundation) version 2.1 dated February 1999./
+
+/* 2019/06/07, ProjectCoefficientSkeletonDG borrowed from HDG branch, 
+ * use for the projection of trace inegrators*/
 
 #ifndef MFEM_GRIDFUNC
 #define MFEM_GRIDFUNC
@@ -230,6 +233,9 @@ public:
    void ProjectCoefficient(VectorCoefficient &vcoeff, Array<int> &dofs);
 
    void ProjectCoefficient(Coefficient *coeff[]);
+
+	/* HDG */
+	void ProjectCoefficientSkeletonDG(Coefficient &coeff);
 
    /** @brief Project a discontinuous vector coefficient as a grid function on
        a continuous finite element space. The values in shared dofs are

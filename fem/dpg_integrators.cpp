@@ -69,16 +69,9 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       Trans.Loc1.Transform(ip, eip1);
       test_fe1.CalcShape(eip1, shape1);
       MultVWt(shape1,normal, shape1_n);
-      if (ndof2)
-      {
-         // Side 2 finite element shape function
-         Trans.Loc2.Transform(ip, eip2);
-         Trans.Loc2.Transf.SetIntPoint(&ip);
-         CalcOrtho(Trans.Loc2.Transf.Jacobian(), normal);
-         test_fe2.CalcShape(eip2, shape2);
-         MultVWt(shape2,normal, shape2_n);
-      }
+
       face_shape *= ip.weight;
+
 	  for( i = 0; i < dim; i++)
 	      for (int k=0; k < ndof1; k++)
 	         for (j = 0; j < face_ndof; j++)
@@ -87,6 +80,12 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
 	         }
       if (ndof2)
       {
+         // Side 2 finite element shape function
+         Trans.Loc2.Transform(ip, eip2);
+         Trans.Loc2.Transf.SetIntPoint(&ip);
+         CalcOrtho(Trans.Loc2.Transf.Jacobian(), normal);
+         test_fe2.CalcShape(eip2, shape2);
+         MultVWt(shape2,normal, shape2_n);
          // Subtract contribution from side 2
 		 for(i = 0; i < dim; i++)
 	         for (int k = 0; k < ndof2; k++)
@@ -223,5 +222,80 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
 
 } /* end of DGVectorWeakDivergenceIntegrator */
 
+
+/* HDG */
+void SkeletonMassIntegrator::AssembleFaceMatrix(const FiniteElement &face_fe,
+                                                FaceElementTransformations &Trans,
+                                                DenseMatrix &elmat)
+{
+   int ndof;
+   double w;
+
+   ndof = face_fe.GetDof();
+   elmat.SetSize(ndof, ndof);
+   elmat = 0.0;
+   shape.SetSize(ndof);
+
+   const IntegrationRule *ir = IntRule;
+   if (ir == NULL)
+   {
+      int order = 2 * face_fe.GetOrder();
+      order *= 2;
+
+      ir = &IntRules.Get(Trans.FaceGeom, order);
+   }
+
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(i);
+      face_fe.CalcShape(ip, shape);
+
+      Trans.Face->SetIntPoint(&ip);
+
+      w = Trans.Face->Weight() * ip.weight;
+
+      AddMult_a_VVt(w, shape, elmat);
+   }
+
+} /* end of SkeletonMassIntegrator */
+
+/* HDG */
+void SkeletonMassIntegratorRHS::AssembleRHSElementVect(const FiniteElement &el,
+                                                       FaceElementTransformations &Tr,
+                                                       Vector &elvect)
+{
+   int dof = el.GetDof();
+
+   shape.SetSize(dof);       // vector of size dof
+   elvect.SetSize(dof);
+   elvect = 0.0;
+
+   const IntegrationRule *ir = IntRule;
+   if (ir == NULL)
+   {
+      ir = &IntRules.Get(el.GetGeomType(), oa * el.GetOrder() + ob);
+   }
+
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(i);
+
+      Tr.Face->SetIntPoint (&ip);
+      double val = Tr.Face->Weight() * Q.Eval(*Tr.Face, ip);
+
+      el.CalcShape(ip, shape);
+
+      add(elvect, ip.weight * val, shape, elvect);
+   }
+} /* end of skeletonmassintegratorrhs */
+
+/* HDG */
+void SkeletonMassIntegratorRHS::AssembleRHSElementVect(
+   const FiniteElement &el, ElementTransformation &Tr, Vector &elvect)
+{
+   mfem_error("Not implemented \n");
+} /* end of skeletonmassintegratorrhs */
+
+/****************************************************/
 
 }

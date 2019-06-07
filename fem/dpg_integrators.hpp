@@ -1,4 +1,7 @@
+// SkeletonMassIntegrator and SkeletonMassIntegratorRHS is implemented by people running 
+// HDG branch
 #include "../config/config.hpp"
+#include "lininteg.hpp"
 
 namespace mfem
 {
@@ -66,5 +69,52 @@ public:
 										  DenseMatrix &elmat);
 
 };
+
+
+
+/* HDG */
+/** Class for local mass matrix assembling a(\lamda,\mu) := <\lambda, \mu>
+    It is used for the boundary elimination for skeleton variables */
+class SkeletonMassIntegrator : public BilinearFormIntegrator
+{
+private:
+   Vector shape;
+
+public:
+   SkeletonMassIntegrator(const IntegrationRule *ir = NULL)
+      : BilinearFormIntegrator(ir) { }
+
+   using BilinearFormIntegrator::AssembleFaceMatrix;
+   virtual void AssembleFaceMatrix(const FiniteElement &face_fe,
+                                   FaceElementTransformations &Trans,
+                                   DenseMatrix &elmat);
+};
+
+/** Class for local mass RHS vector assembling l(\lamda,u) := <\lambda, u>
+    It is used for the boundary elimination */
+/* from HDG branch */
+class SkeletonMassIntegratorRHS: public LinearFormIntegrator
+{
+private:
+   Vector shape;
+   Coefficient &Q;
+   int oa, ob;
+
+public:
+   SkeletonMassIntegratorRHS(Coefficient &QF, int a = 2, int b = 0,
+                             const IntegrationRule *ir = NULL)
+      : LinearFormIntegrator(ir), Q(QF), oa(a), ob(b) { }
+
+   using LinearFormIntegrator::AssembleRHSElementVect;
+   virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                       FaceElementTransformations &Tr,
+                                       Vector &elvect);
+
+   virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                       ElementTransformation &Tr,
+                                       Vector &elvect);
+};
+
+
 /************************************************/
 }

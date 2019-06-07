@@ -12,6 +12,7 @@
 // Test Added by Zhichao Peng 06/02/2019, to make sure DPG integrators works well
 #include "mfem.hpp"
 #include "catch.hpp"
+#include <fstream>
 
 using namespace mfem;
 using namespace std;
@@ -81,11 +82,13 @@ TEST_CASE("Test for the DPG integrators",
 {
    cout<<endl<<"Test Domain Integrator DGDivDivIntegrator"<<endl;
 
-   int order = 2, n = 1, dim = 2;
+   int order = 2, n = 2, dim = 2;
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
-   Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
+   const char *mesh_file = "../../data/inline-quad.mesh";
+   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+//   Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
    /* mesh [0,2] \times [0,3] */
    cout<<endl<<" mesh formed "<<endl<<endl;
 
@@ -93,8 +96,11 @@ TEST_CASE("Test for the DPG integrators",
    /* define the finite element space */
 	L2_FECollection fec_l2(order,dim);
 	L2_FECollection s_fec_l2(order,dim);
-	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
+	FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
+	FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
+
+//	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
+//	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 
@@ -132,12 +138,13 @@ TEST_CASE("Test for the DPG integrators",
 			blf.Assemble();
 			blf.Finalize();
 
+			cout<<endl<<" Bilinear form DGDivDiv Assembled "<<endl;
+
 			MixedBilinearForm blf_mfem(&fespace_l2, &fespace_scalar_l2);
 			blf_mfem.AddDomainIntegrator( new VectorDivergenceIntegrator()  );
 			blf_mfem.Assemble();
 			blf_mfem.Finalize();
 
-			cout<<endl<<" Bilinear form DGDivDiv Assembled "<<endl;
 
 			cout<<endl<<" Sizes"<<endl
 				<<"DivDiv:    "<< blf.SpMat().Width()<<" X "<<blf.SpMat().Height()<<endl
@@ -147,6 +154,13 @@ TEST_CASE("Test for the DPG integrators",
 				<<"tmp1_l2: "<<tmp1_l2.Size()<<endl
 				<<"tmp2_l2: "<<tmp2_l2.Size()<<endl
 				<<endl;
+
+			ofstream my_file("./divdiv.dat"); /*debug */
+			blf.SpMat().PrintMatlab(my_file);/* debug */
+
+			ofstream my_file2("./vdiv.dat"); /*debug */
+			blf_mfem.SpMat().PrintMatlab(my_file2);/* debug */
+
 
 			blf.Mult(f_l2, tmp1_l2);
 			blf_mfem.MultTranspose( divf_l2, tmp2_l2);
