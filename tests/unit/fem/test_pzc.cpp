@@ -30,6 +30,22 @@ void Grad_f2(const Vector & x, Vector & df)
    df[1] = 3.579;
 }
 
+double f3(const Vector & x) { return x[0]*(2.-x[0]) *  x[1]*(3.-x[1]); }
+void Grad_f3(const Vector & x, Vector & df)
+{
+   df.SetSize(2);
+   df[0] = (2.-2.*x[0] ) *x[1]*(3.-x[1]);
+   df[1] = (3.-2.*x[1] ) *x[0]*(2.-x[0]);
+}
+
+double f4(const Vector & x) { return 1.; }
+void Grad_f4(const Vector & x, Vector & df)
+{
+   df.SetSize(2);
+   df[0] = 0.;
+   df[1] = 0.;
+}
+
 void F2_pzc(const Vector &x, Vector & v)
 {
 	v.SetSize(2);
@@ -75,12 +91,12 @@ TEST_CASE("Test this file is correctly linked",
 	cout<<endl<<" hello world"<<endl;
 } /* end of test */
 
-TEST_CASE("Test for the DPG integrators",
-		  "[DPGFaceIntegrator]"
+TEST_CASE("Test for the DPG domain integrators",
+		  "[DPGDomainIntegrator]"
 		  "[pzc]"
 		)
 {
-   cout<<endl<<"Test Domain Integrator DGDivDivIntegrator"<<endl;
+   cout<<endl<<"Test Domain Integrator"<<endl;
 
    int order = 2, n = 2, dim = 2;
    double cg_rtol = 1e-14;
@@ -116,7 +132,7 @@ TEST_CASE("Test for the DPG integrators",
 	GridFunction f2_l2(&fespace_scalar_l2); f2_l2.ProjectCoefficient(f2_coef);
 
     cout<<endl<<" coefficients obtained "<<endl;
-	SECTION("Face integrators: DGDivDivIntegrator") 
+	SECTION("Domain integrators: DGDivDivIntegrator") 
 		/* ************************************************
 		 * compare (div F2_pzc, div basis) calculated by 
 		 * DGDivDivIntegrator(F2_pzc) and  
@@ -225,6 +241,154 @@ TEST_CASE("Test for the DPG integrators",
 	} /* end of SECTION("Face integrators") */
 
 }
-/* end of tesst */
+/**********************************************/
+TEST_CASE("Test for the DPG face integrators",
+		  "[DPGFaceIntegrator]"
+		  "[pzc]"
+		)
+{
+   cout<<endl<<"Test Face Integrator"<<endl;
+
+   int order = 3, n = 1, m=1, dim = 2;
+   double cg_rtol = 1e-14;
+   double tol = 1e-9;
+
+   /* mesh [0,2] \times [0,3] */
+   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 0.5); /* on the reference element, result is correct */
+   
+///   const char *mesh_file = "../../data/inline-quad.mesh";
+//   const char *mesh_file = "../../data/inline-tri.mesh";
+//   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+
+   cout<<endl<<" mesh formed "<<endl<<endl;
+
+
+   /* define the finite element space */
+   L2_FECollection fec_l2(order,dim);
+   L2_FECollection s_fec_l2(order,dim);
+   H1_Trace_FECollection trace_fec(order,dim);
+//   H1_Trace_FECollection trace_fec(order+1,dim);
+                         		
+   FiniteElementSpace fespace_trace(&mesh,&trace_fec);
+   FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
+   FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
+
+//   FiniteElementSpace fespace_trace(mesh,&trace_fec);
+//   FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
+//   FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
+
+	cout<<endl<<"finite elment space formed"<<endl;
+
+	FunctionCoefficient f2_coef(f2);
+	VectorFunctionCoefficient Grad_f2_coef(dim, Grad_f2);
+
+	GridFunction f2_l2(&fespace_scalar_l2); f2_l2.ProjectCoefficient(f2_coef);
+	GridFunction gradf2_l2(&fespace_l2); gradf2_l2.ProjectCoefficient(Grad_f2_coef);
+	GridFunction f2_trace(&fespace_trace); f2_trace.ProjectCoefficientSkeletonDG(f2_coef);
+
+
+   cout<<endl<<"trace number: "<<2*n*(n+1)<<endl
+	   <<"trace dof: "<<f2_trace.Size()<<endl
+	   <<endl;
+	cout<<"trace:"<<endl;
+	for(int i=0; i<f2_trace.Size(); i++){
+		cout<<" "<<i<<": "<< f2_trace(i) <<endl;
+	}
+
+    cout<<endl<<" coefficients obtained "<<endl;
+
+	SECTION("Trace Integrator: NormalTraceJump")
+	{
+		SECTION(" <u,[tau cdot n]>")
+		{
+			/* projection of trace term */
+//			for(int i=0;i<f2_trace.Size();i++){
+//				cout<<f2_trace(i)<<endl;
+//			}
+			Vector tmp1(fespace_l2.GetNDofs()*dim );
+			Vector tmp2(fespace_l2.GetNDofs()*dim );
+			Vector tmp3(fespace_l2.GetNDofs()*dim );
+			Vector res(fespace_l2.GetNDofs()*dim );
+			Vector diff(fespace_l2.GetNDofs()*dim );
+
+			BilinearForm blf_mass(&fespace_l2);
+			blf_mass.AddDomainIntegrator( new VectorMassIntegrator() );
+			blf_mass.Assemble();
+			blf_mass.Finalize();
+
+			MixedBilinearForm blf_div(&fespace_scalar_l2,&fespace_l2);
+			blf_div.AddDomainIntegrator(
+					new TransposeIntegrator(new VectorDivergenceIntegrator() )	);
+			blf_div.Assemble();
+			blf_div.Finalize();
+
+			MixedBilinearForm blf_trace(&fespace_trace,&fespace_l2);
+			blf_trace.AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
+			blf_trace.Assemble();
+			blf_trace.Finalize();
+			
+			cout<<" Integrators assembled"<<endl;
+
+			cout<<"Dimension of integrators"<<endl
+				<<"mass:      "<<blf_mass.SpMat().Height()<<" X "<<blf_mass.SpMat().Width()<<endl
+				<<"weak grad: "<<blf_div.SpMat().Height()  <<" X "<<blf_div.SpMat().Width()<<endl
+				<<"trace:     "<<blf_trace.SpMat().Height()<<" X "<<blf_trace.SpMat().Width()<<endl
+				<<endl;
+
+			blf_mass.Mult(gradf2_l2,tmp1);
+			blf_div.Mult(f2_l2,tmp2);
+			blf_trace.Mult(f2_trace,tmp3);
+
+
+			add(tmp1,tmp2,diff);
+			res = diff;
+			subtract(tmp3,diff,res);
+//			add(tmp3,diff,res);
+//			add(diff,tmp3,res);
+
+			for(int i=0; i<tmp3.Size(); i++){
+				cout<<i<<": "<<endl
+					<<"tmp1: "<<tmp1(i)<<endl
+					<<"tmp2: "<<tmp2(i)<<endl
+					<<"tmp3: "<<tmp3(i)<<endl
+					<<"tmp3 - tmp1 -tmp2 ="<<tmp3(i)-tmp2(i)-tmp1(i)<<endl
+					<<"tmp1+tmp2="<< diff(i) <<endl
+					<<endl;
+			}
+
+
+			double error = res.Norml2();
+			cout<<endl<<" norm of 'zero': "<<error<<endl;
+
+
+			
+		}
+	}
 
 }
+
+/* end of tesst */
+/**********************************************/
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

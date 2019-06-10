@@ -6,6 +6,7 @@
 namespace mfem
 {
 
+
 /* < v, [\tau \cdot n ] > */
 class DGNormalTraceJumpIntegrator : public BilinearFormIntegrator
 {

@@ -14,7 +14,8 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
 {
    // Get DoF from faces and the dimension
    int i, j, face_ndof, ndof1, ndof2, dim;
-   int order;
+   int order=0;
+   double w;
 
    MFEM_VERIFY(trial_face_fe.GetMapType() == FiniteElement::VALUE, "");
 
@@ -47,15 +48,16 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    {
       if (Trans.Elem2No >= 0)
       {
-         order = fmax(test_fe1.GetOrder(), test_fe2.GetOrder()) - 1;
+         order = fmax(test_fe1.GetOrder(), test_fe2.GetOrder()) ;
       }
       else
       {
-         order = test_fe1.GetOrder() - 1;
+         order = test_fe1.GetOrder() ;
       }
-      order += trial_face_fe.GetOrder()+1;
+      order += trial_face_fe.GetOrder();
       ir = &IntRules.Get(Trans.FaceGeom, order);
    }
+   std::cout<< "Quadrature order: "<<order<<std::endl;
 
    for (int p = 0; p < ir->GetNPoints(); p++)
    {
@@ -70,13 +72,22 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       test_fe1.CalcShape(eip1, shape1);
       MultVWt(shape1,normal, shape1_n);
 
-      face_shape *= ip.weight;
+
+      w = ip.weight;
+ //     if (trial_face_fe.GetMapType() == FiniteElement::VALUE)
+ //     {
+		 std::cout<<" face transformation weight "<<p<<" "<<Trans.Face->Weight()<<std::endl
+			      <<" integration weight "<<w<<std::endl;
+         w *= Trans.Face->Weight();
+//	  }
+      face_shape *= w;
+//      face_shape *= ip.weight;
 
 	  for( i = 0; i < dim; i++)
 	      for (int k=0; k < ndof1; k++)
 	         for (j = 0; j < face_ndof; j++)
 	         {
-	            elmat(i*ndof1+k, j) -= shape1_n(k,i) * face_shape(j);
+	            elmat(i*ndof1+k, j) += shape1_n(k,i) * face_shape(j);
 	         }
       if (ndof2)
       {
@@ -91,10 +102,22 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
 	         for (int k = 0; k < ndof2; k++)
 	            for (j = 0; j < face_ndof; j++)
 	            {
-	               elmat(dim*ndof1+i*ndof2+k, j) += shape2_n(k,i) * face_shape(j);
-	            } /* i,j */
+	               elmat(dim*ndof1+i*ndof2+k, j) -= shape2_n(k,i) * face_shape(j);
+	            } /* i,k,j */
+//		 for(int l=0;l<shape2.Size();l++){
+//			std::cout<<l<<"hehehehehe: "<<shape2(l)<<" "<<shape1(l)<<std::endl;
+//		 }
       } /* if */
    } /* p */
+
+   /* out put the final result */
+   for(int i=0;i<dim* (ndof1+ndof2);i++){
+	  std::cout<<std::endl;
+	  for(int j=0;j<face_ndof;j++){
+		std::cout<<" "<< elmat(i,j);
+	  }
+   }
+   std::cout<<std::endl;
 
 }/* end of DGNormalJumpIntegrator */
 
