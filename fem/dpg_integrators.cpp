@@ -15,7 +15,6 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    // Get DoF from faces and the dimension
    int i, j, face_ndof, ndof1, ndof2, dim;
    int order=0;
-   double w;
 
 //   MFEM_VERIFY(trial_face_fe.GetMapType() == FiniteElement::VALUE, "");
 
@@ -43,15 +42,6 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    elmat.SetSize( dim*(ndof1 + ndof2) , face_ndof);
    elmat = 0.0;
 
-	Vector normal2(dim );
-    CalcOrtho(Trans.Face->Jacobian(), normal2);
-	std::cout<<std::endl
-	         <<"Face:"<<std::endl<<" Normal:"<<std::endl;
-	for(int qq=0;qq<normal2.Size();qq++){
-	  	std::cout<<" "<<normal2(qq);
-	}
-	std::cout<<std::endl;
-
    const IntegrationRule *ir = IntRule;
    if (ir == NULL)
    {
@@ -66,7 +56,6 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       order += trial_face_fe.GetOrder();
       ir = &IntRules.Get(Trans.FaceGeom, order);
    }
-   std::cout<< "Quadrature order: "<<order<<std::endl;
 
    for (int p = 0; p < ir->GetNPoints(); p++)
    {
@@ -74,27 +63,19 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       IntegrationPoint eip1, eip2;
       // Trace finite element shape function
       trial_face_fe.CalcShape(ip, face_shape);
-      Trans.Loc1.Transf.SetIntPoint(&ip);
-      CalcOrtho(Trans.Loc1.Transf.Jacobian(), normal);
-//      CalcOrtho(Trans.Face->Jacobian(), normal);
+
+	  Trans.Face->SetIntPoint(&ip);
+      CalcOrtho(Trans.Face->Jacobian(), normal);
 
 	 /*********************************************************/
 	  /* debug */
-	  if(p==0){
-		std::cout<<std::endl
-	  	         <<"Trans1:"<<std::endl<<" Normal:"<<std::endl;
-	  	for(int qq=0;qq<normal.Size();qq++){
-	  	  	std::cout<<" "<<normal(qq);
-	  	}
-//		std::cout<<std::endl<<"Jacobian:"<<Trans.Loc1.Transf.Jacobian().Height()<<" "
-//				 <<Trans.Loc1.Transf.Jacobian().Width()<<std::endl;
-//	  	for(int qq=0;qq<Trans.Loc1.Transf.Jacobian().Height();qq++){
-//			for(int qq2=0;qq2<Trans.Loc1.Transf.Jacobian().Width();qq2++){
-//				std::cout<<" "<<Trans.Loc1.Transf.Jacobian()(qq,qq2);
-//			}
-//			std::cout<<std::endl;
+//	  if(p==0){
+//		std::cout<<std::endl
+//	  	         <<"Trans1:"<<std::endl<<" Normal:"<<std::endl;
+//	  	for(int qq=0;qq<normal.Size();qq++){
+//	  	  	std::cout<<" "<<normal(qq);
 //	  	}
-
+//
 //		Vector normal2(dim );
 //        CalcOrtho(Trans.Face->Jacobian(), normal2);
 //		std::cout<<std::endl
@@ -102,30 +83,8 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
 //	  	for(int qq=0;qq<normal2.Size();qq++){
 //	  	  	std::cout<<" "<<normal2(qq);
 //	  	}
-//		std::cout<<std::endl<<"Jacobian:"<<Trans.Face->Jacobian().Height()<<" "
-//				 <<Trans.Face->Jacobian().Width()<<std::endl;
-//	  	for(int qq=0;qq<Trans.Face->Jacobian().Height();qq++){
-//			for(int qq2=0;qq2<Trans.Face->Jacobian().Width();qq2++){
-//				std::cout<<" "<<Trans.Face->Jacobian()(qq,qq2);
-//			}
-//		}
-
-//		Vector normal3(dim );
-//        CalcOrtho(Trans.Elem1->Jacobian(), normal3);
-// 		std::cout<<std::endl
-// 	  	         <<"Elem1:"<<std::endl<<" Normal:"<<std::endl;
-// //	  	for(int qq=0;qq<normal2.Size();qq++){
-// //	  	  	std::cout<<" "<<normal2(qq);
-// //	  	}
-// 		std::cout<<std::endl<<"Jacobian:"<<Trans.Elem1->Jacobian().Height()<<" "
-// 				 <<Trans.Elem1->Jacobian().Width()<<std::endl;
-// 	  	for(int qq=0;qq<Trans.Elem1->Jacobian().Height();qq++){
-// 			for(int qq2=0;qq2<Trans.Elem1->Jacobian().Width();qq2++){
-// 				std::cout<<" "<<Trans.Elem1->Jacobian()(qq,qq2);
-// 			}
-// 		}
-		std::cout<<std::endl;
-	}
+//		std::cout<<std::endl;
+//	}
 	 /*********************************************************/
 
       // Side 1 finite element shape function
@@ -134,17 +93,14 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       MultVWt(shape1,normal, shape1_n);
 
 
-      w = ip.weight;
- //     if (trial_face_fe.GetMapType() == FiniteElement::VALUE)
- //     {
-		 std::cout<<" face weight "<<" "<<Trans.Face->Weight()<<std::endl
-			      <<" Trans1 weight: "<< Trans.Elem1->Weight()<<std::endl
-//			      <<" integration weight "<<w
-				  <<std::endl;
-         w *= Trans.Face->Weight();
+//     if (trial_face_fe.GetMapType() == FiniteElement::VALUE)
+//     {
+//		 std::cout<<" face weight "<<" "<<Trans.Face->Weight()<<std::endl
+//			      <<" Trans1 weight: "<< Trans.Elem1->Weight()<<std::endl
+//				  <<std::endl;
+//         w *= Trans.Face->Weight();
 //	  }
-      face_shape *= w;
-//      face_shape *= ip.weight;
+      face_shape *= ip.weight;
 
 	  for( i = 0; i < dim; i++)
 	      for (int k=0; k < ndof1; k++)
@@ -157,7 +113,7 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
          // Side 2 finite element shape function
          Trans.Loc2.Transform(ip, eip2);
          Trans.Loc2.Transf.SetIntPoint(&ip);
-         CalcOrtho(Trans.Loc2.Transf.Jacobian(), normal);
+//         CalcOrtho(Trans.Loc2.Transf.Jacobian(), normal);
          test_fe2.CalcShape(eip2, shape2);
          MultVWt(shape2,normal, shape2_n);
          // Subtract contribution from side 2
@@ -167,22 +123,11 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
 	            {
 	               elmat(dim*ndof1+i*ndof2+k, j) -= shape2_n(k,i) * face_shape(j);
 	            } /* i,k,j */
-//		 for(int l=0;l<shape2.Size();l++){
-//			std::cout<<l<<"hehehehehe: "<<shape2(l)<<" "<<shape1(l)<<std::endl;
-//		 }
       } /* if */
    } /* p */
 
-   /* out put the final result */
-   for(int i=0;i<dim* (ndof1+ndof2);i++){
-	  std::cout<<std::endl;
-	  for(int j=0;j<face_ndof;j++){
-//		std::cout<<" "<< elmat(i,j);
-	  }
-   }
-   std::cout<<std::endl;
-
 }/* end of DGNormalJumpIntegrator */
+/*****************************************************/
 
 /* (div v, div w ), v and w are in DG space */
 void DGDivDivIntegrator::AssembleElementMatrix(

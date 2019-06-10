@@ -249,7 +249,7 @@ TEST_CASE("Test for the DPG face integrators",
 {
    cout<<endl<<"Test Face Integrator"<<endl;
 
-   int order = 0, n = 1, m=1, dim = 2;
+   int order = 1, n = 2, m=2, dim = 2;
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
@@ -258,8 +258,9 @@ TEST_CASE("Test for the DPG face integrators",
 //   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 1.,0); /* on the reference element, result is correct */
 //   Mesh mesh(m, n, Element::TRIANGLE, 1, 0.5, 1.,0); /* on the reference element, result is correct */
    
-///   const char *mesh_file = "../../data/inline-quad.mesh";
-   const char *mesh_file = "../../data/inline-quad-pzc.mesh";
+//   const char *mesh_file = "../../data/inline-quad.mesh";
+//   const char *mesh_file = "../../data/star.mesh";
+   const char *mesh_file = "../../data/square-disc.mesh";
 //   const char *mesh_file = "../../data/inline-tri.mesh";
    Mesh *mesh = new Mesh(mesh_file, 1, 1);
 
@@ -269,9 +270,7 @@ TEST_CASE("Test for the DPG face integrators",
    /* define the finite element space */
    L2_FECollection fec_l2(order,dim);
    L2_FECollection s_fec_l2(order,dim);
-   DG_Interface_FECollection  trace_fec(order,dim);
-//   H1_Trace_FECollection trace_fec(order,dim);
-//   H1_Trace_FECollection trace_fec(order+1,dim);
+   H1_Trace_FECollection trace_fec(order,dim);
                          		
 //   FiniteElementSpace fespace_trace(&mesh,&trace_fec);
 //   FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
@@ -305,15 +304,11 @@ TEST_CASE("Test for the DPG face integrators",
 	{
 		SECTION(" <u,[tau cdot n]>")
 		{
-			/* projection of trace term */
-//			for(int i=0;i<f2_trace.Size();i++){
-//				cout<<f2_trace(i)<<endl;
-//			}
 			Vector tmp1(fespace_l2.GetNDofs()*dim );
 			Vector tmp2(fespace_l2.GetNDofs()*dim );
 			Vector tmp3(fespace_l2.GetNDofs()*dim );
 			Vector res(fespace_l2.GetNDofs()*dim );
-			Vector diff(fespace_l2.GetNDofs()*dim );
+			Vector tmp_sum12(fespace_l2.GetNDofs()*dim );
 
 			BilinearForm blf_mass(&fespace_l2);
 			blf_mass.AddDomainIntegrator( new VectorMassIntegrator() );
@@ -344,25 +339,23 @@ TEST_CASE("Test for the DPG face integrators",
 			blf_trace.Mult(f2_trace,tmp3);
 
 
-			add(tmp1,tmp2,diff);
-			res = diff;
-			subtract(tmp3,diff,res);
-//			add(tmp3,diff,res);
-//			add(diff,tmp3,res);
+			add(tmp1,tmp2,tmp_sum12);
+			subtract(tmp3,tmp_sum12,res);
 
-			for(int i=0; i<tmp3.Size(); i++){
-				cout<<i<<": "<<endl
-					<<"tmp1: "<<tmp1(i)<<endl
-					<<"tmp2: "<<tmp2(i)<<endl
-					<<"tmp3: "<<tmp3(i)<<endl
-					<<"tmp3 - tmp1 -tmp2 ="<<tmp3(i)-tmp2(i)-tmp1(i)<<endl
-					<<"tmp1+tmp2="<< diff(i) <<endl
-					<<endl;
-			}
-
+//			for(int i=0; i<tmp3.Size(); i++){
+//				cout<<i<<": "<<endl
+//					<<"tmp1: "<<tmp1(i)<<endl
+//					<<"tmp2: "<<tmp2(i)<<endl
+//					<<"tmp3: "<<tmp3(i)<<endl
+//					<<"tmp3 - tmp1 -tmp2 ="<<tmp3(i)-tmp2(i)-tmp1(i)<<endl
+//					<<"tmp1+tmp2="<< diff(i) <<endl
+//					<<endl;
+//			}
+//
 
 			double error = res.Norml2();
 			cout<<endl<<" norm of 'zero': "<<error<<endl;
+			REQUIRE(error<tol);
 
 
 			
