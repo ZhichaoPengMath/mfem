@@ -249,16 +249,19 @@ TEST_CASE("Test for the DPG face integrators",
 {
    cout<<endl<<"Test Face Integrator"<<endl;
 
-   int order = 3, n = 1, m=1, dim = 2;
+   int order = 0, n = 1, m=1, dim = 2;
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
    /* mesh [0,2] \times [0,3] */
-   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 0.5); /* on the reference element, result is correct */
+//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 0.5); /* on the reference element, result is correct */
+//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 1.,0); /* on the reference element, result is correct */
+//   Mesh mesh(m, n, Element::TRIANGLE, 1, 0.5, 1.,0); /* on the reference element, result is correct */
    
 ///   const char *mesh_file = "../../data/inline-quad.mesh";
+   const char *mesh_file = "../../data/inline-quad-pzc.mesh";
 //   const char *mesh_file = "../../data/inline-tri.mesh";
-//   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+   Mesh *mesh = new Mesh(mesh_file, 1, 1);
 
    cout<<endl<<" mesh formed "<<endl<<endl;
 
@@ -266,16 +269,17 @@ TEST_CASE("Test for the DPG face integrators",
    /* define the finite element space */
    L2_FECollection fec_l2(order,dim);
    L2_FECollection s_fec_l2(order,dim);
-   H1_Trace_FECollection trace_fec(order,dim);
+   DG_Interface_FECollection  trace_fec(order,dim);
+//   H1_Trace_FECollection trace_fec(order,dim);
 //   H1_Trace_FECollection trace_fec(order+1,dim);
                          		
-   FiniteElementSpace fespace_trace(&mesh,&trace_fec);
-   FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-   FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
+//   FiniteElementSpace fespace_trace(&mesh,&trace_fec);
+//   FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
+//   FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
 
-//   FiniteElementSpace fespace_trace(mesh,&trace_fec);
-//   FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
-//   FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
+   FiniteElementSpace fespace_trace(mesh,&trace_fec);
+   FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
+   FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 

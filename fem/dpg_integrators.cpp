@@ -17,7 +17,7 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    int order=0;
    double w;
 
-   MFEM_VERIFY(trial_face_fe.GetMapType() == FiniteElement::VALUE, "");
+//   MFEM_VERIFY(trial_face_fe.GetMapType() == FiniteElement::VALUE, "");
 
    face_ndof = trial_face_fe.GetDof();
    ndof1 = test_fe1.GetDof();
@@ -43,6 +43,15 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    elmat.SetSize( dim*(ndof1 + ndof2) , face_ndof);
    elmat = 0.0;
 
+	Vector normal2(dim );
+    CalcOrtho(Trans.Face->Jacobian(), normal2);
+	std::cout<<std::endl
+	         <<"Face:"<<std::endl<<" Normal:"<<std::endl;
+	for(int qq=0;qq<normal2.Size();qq++){
+	  	std::cout<<" "<<normal2(qq);
+	}
+	std::cout<<std::endl;
+
    const IntegrationRule *ir = IntRule;
    if (ir == NULL)
    {
@@ -67,6 +76,58 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       trial_face_fe.CalcShape(ip, face_shape);
       Trans.Loc1.Transf.SetIntPoint(&ip);
       CalcOrtho(Trans.Loc1.Transf.Jacobian(), normal);
+//      CalcOrtho(Trans.Face->Jacobian(), normal);
+
+	 /*********************************************************/
+	  /* debug */
+	  if(p==0){
+		std::cout<<std::endl
+	  	         <<"Trans1:"<<std::endl<<" Normal:"<<std::endl;
+	  	for(int qq=0;qq<normal.Size();qq++){
+	  	  	std::cout<<" "<<normal(qq);
+	  	}
+//		std::cout<<std::endl<<"Jacobian:"<<Trans.Loc1.Transf.Jacobian().Height()<<" "
+//				 <<Trans.Loc1.Transf.Jacobian().Width()<<std::endl;
+//	  	for(int qq=0;qq<Trans.Loc1.Transf.Jacobian().Height();qq++){
+//			for(int qq2=0;qq2<Trans.Loc1.Transf.Jacobian().Width();qq2++){
+//				std::cout<<" "<<Trans.Loc1.Transf.Jacobian()(qq,qq2);
+//			}
+//			std::cout<<std::endl;
+//	  	}
+
+//		Vector normal2(dim );
+//        CalcOrtho(Trans.Face->Jacobian(), normal2);
+//		std::cout<<std::endl
+//	  	         <<"Face:"<<std::endl<<" Normal:"<<std::endl;
+//	  	for(int qq=0;qq<normal2.Size();qq++){
+//	  	  	std::cout<<" "<<normal2(qq);
+//	  	}
+//		std::cout<<std::endl<<"Jacobian:"<<Trans.Face->Jacobian().Height()<<" "
+//				 <<Trans.Face->Jacobian().Width()<<std::endl;
+//	  	for(int qq=0;qq<Trans.Face->Jacobian().Height();qq++){
+//			for(int qq2=0;qq2<Trans.Face->Jacobian().Width();qq2++){
+//				std::cout<<" "<<Trans.Face->Jacobian()(qq,qq2);
+//			}
+//		}
+
+//		Vector normal3(dim );
+//        CalcOrtho(Trans.Elem1->Jacobian(), normal3);
+// 		std::cout<<std::endl
+// 	  	         <<"Elem1:"<<std::endl<<" Normal:"<<std::endl;
+// //	  	for(int qq=0;qq<normal2.Size();qq++){
+// //	  	  	std::cout<<" "<<normal2(qq);
+// //	  	}
+// 		std::cout<<std::endl<<"Jacobian:"<<Trans.Elem1->Jacobian().Height()<<" "
+// 				 <<Trans.Elem1->Jacobian().Width()<<std::endl;
+// 	  	for(int qq=0;qq<Trans.Elem1->Jacobian().Height();qq++){
+// 			for(int qq2=0;qq2<Trans.Elem1->Jacobian().Width();qq2++){
+// 				std::cout<<" "<<Trans.Elem1->Jacobian()(qq,qq2);
+// 			}
+// 		}
+		std::cout<<std::endl;
+	}
+	 /*********************************************************/
+
       // Side 1 finite element shape function
       Trans.Loc1.Transform(ip, eip1);
       test_fe1.CalcShape(eip1, shape1);
@@ -76,8 +137,10 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
       w = ip.weight;
  //     if (trial_face_fe.GetMapType() == FiniteElement::VALUE)
  //     {
-		 std::cout<<" face transformation weight "<<p<<" "<<Trans.Face->Weight()<<std::endl
-			      <<" integration weight "<<w<<std::endl;
+		 std::cout<<" face weight "<<" "<<Trans.Face->Weight()<<std::endl
+			      <<" Trans1 weight: "<< Trans.Elem1->Weight()<<std::endl
+//			      <<" integration weight "<<w
+				  <<std::endl;
          w *= Trans.Face->Weight();
 //	  }
       face_shape *= w;
@@ -114,7 +177,7 @@ void DGNormalTraceJumpIntegrator::AssembleFaceMatrix(const FiniteElement &trial_
    for(int i=0;i<dim* (ndof1+ndof2);i++){
 	  std::cout<<std::endl;
 	  for(int j=0;j<face_ndof;j++){
-		std::cout<<" "<< elmat(i,j);
+//		std::cout<<" "<< elmat(i,j);
 	  }
    }
    std::cout<<std::endl;
