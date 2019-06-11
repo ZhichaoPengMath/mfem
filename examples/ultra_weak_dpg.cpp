@@ -61,6 +61,9 @@ int main(int argc, char *argv[])
    int order = 1;
    bool visualization = 1;
    int ref_levels = -1;
+   int divdiv_opt = 1;
+   int gradgrad_opt = 0;
+   int solver_print_opt = 0;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -73,7 +76,13 @@ int main(int argc, char *argv[])
    args.AddOption(&alpha_pzc, "-alpha", "--alpha",
                   "arctan( alpha * x) as exact solution");
    args.AddOption(&ref_levels, "-r", "--refine",
-                  "Number of times to refine the mesh uniformly, -1 for auto.");
+                  "Number of times to refine the mesh uniformly, -1 by default.");
+   args.AddOption(&divdiv_opt, "-divdiv", "--divdiv",
+                  "Whether add || ||_{H(div)} in the test norm or not, 1 by default");
+   args.AddOption(&gradgrad_opt, "-gradgrad", "--gradgrad",
+                  "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
+   args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
+                  "printing option for linear solver, 0 by default");
 
    args.Parse();
    if (!args.Good())
@@ -82,6 +91,7 @@ int main(int argc, char *argv[])
       return 1;
    }
    args.PrintOptions(cout);
+
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -364,7 +374,23 @@ int main(int argc, char *argv[])
 
    SumIntegrator *VSum = new SumIntegrator;
    VSum->AddIntegrator(new VectorMassIntegrator() );
-   VSum->AddIntegrator(new DGDivDivIntegrator() );
+   if(divdiv_opt==1){
+		VSum->AddIntegrator(new DGDivDivIntegrator() );
+   }
+   if(gradgrad_opt==1){
+		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
+   }
+
+   cout<<"test norm: "<<endl
+	   <<"|| (tau,v) ||_V^2 = || tau ||^2";
+   if(divdiv_opt==1){
+	   cout<<"+|| div(tau) ||^2";
+   }
+   if(gradgrad_opt==1){
+	   cout<<"+|| grad(tau) ||^2";
+   }
+   cout<<"+||v||^2+||grad(v)||^2"
+	   <<endl<<endl;
 //   VSum->AddIntegrator(new VectorDiffusionIntegrator() ); /* debug */
 
 
@@ -569,16 +595,10 @@ int main(int argc, char *argv[])
 //   //     Check the weighted norm of residual for the DPG least square problem.
 //   //     Wrap the primal variable in a GridFunction for visualization purposes.
 
-     CG(A,b,x,1,2000, 1e-12,0.);
-//     CG(A,b,x,0,2000, 1e-20,0.);
-//     CG(A,b,x,1,2000, 1e-20,0.);
-//     CG(A,b,x,1,2000, 0., 1e-10);
-//     CG(A,b,x,0,2000, 0., 1e-10);
-//     GMRES(A, P, b, x, 1, 1000, 1000, 1e-12, 1e-12);
-//     GMRES(A, P, b, x, 1, 1000, 1000, 0., 1e-12);
-//     GMRES(A, P, Ab, x, 1, 1000, 1000, 1e-12, 0.0);
-//   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
-//
+     CG(A,b,x,solver_print_opt,4000, 1e-12,0.);
+//   GMRES(A, P, b, x, solver_print_opt, 1000, 1000, 0., 1e-12);
+//   PCG(A, P, b, x, solver_print_opt, 1000, 1e-12, 0.0);
+
 //   qhat = 1.;
 //   PCG(A, P, b, x, 1, 200, 1e-20, 1e-12);
 
@@ -647,7 +667,7 @@ int main(int argc, char *argv[])
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return -12.*x(0)-12.*x(1) + 12.;
-		return -4.;
+//		return -4.;
 //		return 0.;
 		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 	}
@@ -668,7 +688,7 @@ double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return  2.*x(0)*x(0)*x(0) - 3.*x(0)*x(0)
 //			   +2.*x(1)*x(1)*x(1) - 3.*x(1)*x(1);
-		return  x(0)*x(0) + x(1) * x(1);
+//		return  x(0)*x(0) + x(1) * x(1);
 //		return  1.;
 //		return  x(0) + x(1);
 		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
@@ -692,8 +712,8 @@ void q_exact(const Vector & x,Vector & f){
 //		f(0) = -1.;
 //		f(1) = -1.;
 
-		f(0) = -2.*x(0);
-		f(1) = -2.*x(1);
+//		f(0) = -2.*x(0);
+//		f(1) = -2.*x(1);
 
 //		f(0) = 6.*x(0)*(x(0)-1);
 //		f(1) = 6.*x(1)*(x(1)-1);

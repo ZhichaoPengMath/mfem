@@ -98,25 +98,29 @@ TEST_CASE("Test for the DPG domain integrators",
 {
    cout<<endl<<"Test Domain Integrator"<<endl;
 
-   int order = 2, n = 2, dim = 2;
+   int order = 2, m = 2, n = 1,  dim = 2;
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
-   const char *mesh_file = "../../data/inline-quad.mesh";
-   Mesh *mesh = new Mesh(mesh_file, 1, 1);
-//   Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
+//   const char *mesh_file = "../../data/inline-quad.mesh";
+//   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
+   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 1.0, 1.0);
    /* mesh [0,2] \times [0,3] */
    cout<<endl<<" mesh formed "<<endl<<endl;
 
 
    /* define the finite element space */
+//	L2_FECollection fec_l2(order,dim,1);
+//	L2_FECollection s_fec_l2(order,dim,1);
 	L2_FECollection fec_l2(order,dim);
 	L2_FECollection s_fec_l2(order,dim);
-	FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
-	FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
 
-//	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-//	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
+//	FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
+//	FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
+
+	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
+	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 
@@ -161,6 +165,16 @@ TEST_CASE("Test for the DPG domain integrators",
 			blf_mfem.Assemble();
 			blf_mfem.Finalize();
 
+			BilinearForm blf_mass(&fespace_l2);
+			blf_mass.AddDomainIntegrator( new VectorMassIntegrator() );
+			blf_mass.Assemble();
+			blf_mass.Finalize();
+
+			BilinearForm blf_diff(&fespace_scalar_l2);
+			blf_diff.AddDomainIntegrator( new VectorDiffusionIntegrator() );
+			blf_diff.Assemble();
+			blf_diff.Finalize();
+
 
 			cout<<endl<<" Sizes"<<endl
 				<<"DivDiv:    "<< blf.SpMat().Width()<<" X "<<blf.SpMat().Height()<<endl
@@ -174,8 +188,15 @@ TEST_CASE("Test for the DPG domain integrators",
 			ofstream my_file("./divdiv.dat"); /*debug */
 			blf.SpMat().PrintMatlab(my_file);/* debug */
 
+
 			ofstream my_file2("./vdiv.dat"); /*debug */
 			blf_mfem.SpMat().PrintMatlab(my_file2);/* debug */
+
+			ofstream my_file3("./mass.dat"); /*debug */
+			blf_mass.SpMat().PrintMatlab(my_file3);/* debug */
+
+			ofstream my_file4("./diff.dat"); /*debug */
+			blf_diff.SpMat().PrintMatlab(my_file4);/* debug */
 
 
 			blf.Mult(f_l2, tmp1_l2);
@@ -348,7 +369,7 @@ TEST_CASE("Test for the DPG face integrators",
 //					<<"tmp2: "<<tmp2(i)<<endl
 //					<<"tmp3: "<<tmp3(i)<<endl
 //					<<"tmp3 - tmp1 -tmp2 ="<<tmp3(i)-tmp2(i)-tmp1(i)<<endl
-//					<<"tmp1+tmp2="<< diff(i) <<endl
+//					<<"tmp1+tmp2="<< tmp_sum12(i) <<endl
 //					<<endl;
 //			}
 //
