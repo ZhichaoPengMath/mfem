@@ -65,6 +65,8 @@ int main(int argc, char *argv[])
    int gradgrad_opt = 0;
    int solver_print_opt = 0;
 
+   double c_divdiv = 1.;
+
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
@@ -83,6 +85,8 @@ int main(int argc, char *argv[])
                   "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
    args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
                   "printing option for linear solver, 0 by default");
+   args.AddOption(&c_divdiv, "-c_divdiv", "--c_divdiv",
+                  "constant to penalize divdiv in the test norm, 1. by default");
 
    args.Parse();
    if (!args.Good())
@@ -372,10 +376,13 @@ int main(int argc, char *argv[])
    VSUM->Assemble(); /* debug */
    VSUM->Finalize(); /* debug */
 
+
+   ConstantCoefficient const_divdiv( c_divdiv );          /* coefficients */
+ 
    SumIntegrator *VSum = new SumIntegrator;
    VSum->AddIntegrator(new VectorMassIntegrator() );
    if(divdiv_opt==1){
-		VSum->AddIntegrator(new DGDivDivIntegrator() );
+		VSum->AddIntegrator(new DGDivDivIntegrator(const_divdiv) );
    }
    if(gradgrad_opt==1){
 		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
