@@ -1,5 +1,3 @@
-//                                MFEM Example 8
-//
 // Compile with: make ultra_weak_dpg
 //
 // Sample runs:  ./ultra_weak_dpg -m ../data/square-disc.mesh
@@ -50,14 +48,16 @@ using namespace mfem;
 
 double f_exact(const Vector & x);
 double u_exact(const Vector & x);
+double q_trace_exact(const Vector & x);
 void  zero_fun(const Vector & x, Vector & f);
+void  q_exact(const Vector & x, Vector & f);
 
 double alpha_pzc = 100.;
 
 int main(int argc, char *argv[])
 {
    // 1. Parse command-line options.
-   const char *mesh_file = "../data/star.mesh";
+   const char *mesh_file = "../data/inline-quad-pzc.mesh";
    int order = 1;
    bool visualization = 1;
    int ref_levels = -1;
@@ -191,19 +191,40 @@ int main(int argc, char *argv[])
    BlockVector x(offsets), b(offsets);
    x = 0.;
 
+
    BlockVector F(offsets_test); /* block vector for the linear form on the right hand side */
    F = 0.;
 
    ConstantCoefficient one(1.0);          /* coefficients */
    VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
+   VectorFunctionCoefficient q_coeff(dim, q_exact);          /* coefficients */
+   FunctionCoefficient q_trace_coeff( q_trace_exact ); /* coefficients */
    FunctionCoefficient f_coeff( f_exact );/* coefficients */
    FunctionCoefficient u_coeff( u_exact );/* coefficients */
 
+
+   GridFunction u0;
+   u0.MakeRef(u0_space, x.GetBlock(u0_var), 0);
+//   u0.ProjectCoefficient(u_coeff);
+//
+   GridFunction q0;
+   q0.MakeRef(q0_space, x.GetBlock(q0_var), 0);
+//   q0.ProjectCoefficient(q_coeff);
+
+   GridFunction uhat;
+   uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
+   uhat.ProjectCoefficientSkeletonDG(u_coeff);
+
+   GridFunction qhat;
+   qhat.MakeRef(qhat_space, x.GetBlock(qhat_var), 0);
+//   qhat.ProjectCoefficientSkeletonDG(q_trace_coeff);
+
+
    /* rhs for (q,\tau) - (u,\div(\tau) ) + \lgl hhat,\tau\cdot n \rgl = 0 */
-   LinearForm * f_grad(new LinearForm);
-   f_grad->Update(vtest_space, F.GetBlock(0) ,0);
-   f_grad->AddDomainIntegrator(new VectorDomainLFIntegrator( vec_zero ) );
-   f_grad->Assemble();
+//   LinearForm * f_grad(new LinearForm);
+//   f_grad->Update(vtest_space, F.GetBlock(0) ,0);
+//   f_grad->AddDomainIntegrator(new VectorDomainLFIntegrator( vec_zero ) );
+//   f_grad->Assemble();
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
    LinearForm * f_div(new LinearForm);
@@ -213,22 +234,19 @@ int main(int argc, char *argv[])
 
    // 6. Deal with boundary conditions
    //    Dirichlet boundary condition is imposed throught trace term  \hat{u}
-//   Array<int> ess_bdr(mesh->bdr_attributes.Max());
-//   ess_bdr = 1;
-//
-//   Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
-//   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list);
-//
-//   cout<<endl<<endl<<"Boundary information: "<<endl;
-//   cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
-//   cout<<" number of essential true dofs "<<ess_trace_dof_list.Size()<<endl;
-//
-//   GridFunction uhat;
-//   uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
-//   uhat.ProjectBdrCoefficient(u_coeff,ess_trace_dof_list);
+   Array<int> ess_bdr(mesh->bdr_attributes.Max());
+   ess_bdr = 1;
+
+   Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
+   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list);
+
+   cout<<endl<<endl<<"Boundary information: "<<endl;
+   cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
+   cout<<" number of essential true dofs "<<ess_trace_dof_list.Size()<<endl;
+
 
    // 7. Set up the mixed bilinear forms 
-   //    B_mass_q: (q,\tau)
+   //    B_mass_q:    (q,\tau)
    //    B_u_dot_div: (u, div(\tau) ) 
    //    B_u_normal_jump:  \lgl \hat{u} , \tau\cdot n\rgl
    //
@@ -264,7 +282,7 @@ int main(int argc, char *argv[])
    MixedBilinearForm *B_u_normal_jump = new MixedBilinearForm(uhat_space, vtest_space);
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
-//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
+   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
 
    cout<<endl<<"< u, tau cdot n > assembled"<<endl;
@@ -285,19 +303,74 @@ int main(int argc, char *argv[])
 
    cout<<endl<<"< q, v > assembled"<<endl;
 
-   /* size of matrices */
+   /* get  matrices */
    SparseMatrix &matB_mass_q = B_mass_q->SpMat();
    SparseMatrix &matB_u_dot_div = B_u_dot_div->SpMat();
+   matB_u_dot_div *= -1.;
    SparseMatrix &matB_u_normal_jump = B_u_normal_jump->SpMat();
    SparseMatrix &matB_q_weak_div = B_q_weak_div->SpMat();
    SparseMatrix &matB_q_jump = B_q_jump->SpMat();
 
+/*****************************************************************/
+	/* debug */
+//	Vector tmp1(vtest_space->GetNDofs()*dim );
+//	Vector tmp2(vtest_space->GetNDofs()*dim );
+//	Vector tmp3(vtest_space->GetNDofs()*dim );
+//	Vector  res(vtest_space->GetNDofs()*dim );
+//	Vector tmp12(vtest_space->GetNDofs()*dim );
+//
+//	B_mass_q->Mult(q0,tmp1);
+//	B_u_dot_div->Mult(u0,tmp2);
+//	B_u_normal_jump->Mult(uhat,tmp3);
+//	add(tmp1,tmp2,tmp12);
+//	add(tmp3,tmp12,res);
+//
+//	for(int i=0; i<tmp3.Size(); i++){
+//		cout<<i<<": "<<endl
+//			<<"tmp1: "<<tmp1(i)<<endl
+//			<<"tmp2: "<<tmp2(i)<<endl
+//			<<"tmp3: "<<tmp3(i)<<endl
+//			<<"tmp1+tmp2="<< tmp12(i) <<endl
+//			<<"tmp3 + tmp1 +tmp2 ="<<tmp3(i)+tmp12(i)<<endl
+//			<<endl;
+//	}
+//
+//	cout<<endl<<endl<<"Debug, norm of 0, equation 1: "<< res.Norml2() <<endl;
+//
+//	Vector ppg1(stest_space->GetNDofs() );
+//	Vector res_ppg(stest_space->GetNDofs() );
+//
+//	MixedBilinearForm *blf = new MixedBilinearForm(q0_space,stest_space);
+//	blf->AddDomainIntegrator(new VectorDivergenceIntegrator() );
+//	blf->Assemble();
+//	blf->Finalize();
+//
+//	blf->Mult(q0,ppg1);
+//	subtract(ppg1,F.GetBlock(1) ,res_ppg);
+//
+//	cout<<endl<<endl<<"Debug, norm of 0, equation 2: "<< res_ppg.Norml2() <<endl;
+
+/*****************************************************************/
+
+
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
    BilinearForm *Vinv = new BilinearForm(vtest_space);
+
+   BilinearForm *VSUM = new BilinearForm(vtest_space);
+   VSUM->AddDomainIntegrator(new VectorMassIntegrator() );
+   VSUM->AddDomainIntegrator(new VectorDiffusionIntegrator() );
+   VSUM->Assemble(); /* debug */
+   VSUM->Finalize(); /* debug */
+
    SumIntegrator *VSum = new SumIntegrator;
    VSum->AddIntegrator(new VectorMassIntegrator() );
    VSum->AddIntegrator(new DGDivDivIntegrator() );
+//   VSum->AddIntegrator(new VectorDiffusionIntegrator() ); /* debug */
+
+
    Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
+//   Vinv->AddDomainIntegrator(new DGDivDivIntegrator() );
+//   Vinv->AddDomainIntegrator(new VectorMassIntegrator() );
    Vinv->Assemble();
    Vinv->Finalize();
 
@@ -311,16 +384,33 @@ int main(int argc, char *argv[])
 
    SparseMatrix &matVinv = Vinv->SpMat();
    SparseMatrix &matSinv = Sinv->SpMat();
+   SparseMatrix &matVSUM = VSUM->SpMat(); /* debug */
+//   SparseMatrix &output= VSUM->SpMat();
+   SparseMatrix *output=NULL;
+   Mult(matVinv,matVSUM,output);
 	
    cout<<endl<<endl<<"matrix dimensions: "<<endl
-	   <<" mass_q:        "<<matB_mass_q.Width()   <<" X "<<matB_mass_q.Height()<<endl
-	   <<" u_dot_div:     "<<matB_u_dot_div.Width()<<" X "<<matB_u_dot_div.Height()<<endl
-	   <<" u_normal_jump: "<<matB_u_normal_jump.Width()<<" X "<<matB_u_normal_jump.Height()<<endl
-	   <<" q_weak_div:    "<<matB_q_weak_div.Width()<<" X "<<matB_q_weak_div.Height()<<endl
-	   <<" q_jump:        "<<matB_q_jump.Width()<<" X "<<matB_q_jump.Height()<<endl;
+	   <<" mass_q:        "<<matB_mass_q.Height()   <<" X "<<matB_mass_q.Width()<<endl
+	   <<" u_dot_div:     "<<matB_u_dot_div.Height()<<" X "<<matB_u_dot_div.Width()<<endl
+	   <<" u_normal_jump: "<<matB_u_normal_jump.Height()<<" X "<<matB_u_normal_jump.Width()<<endl
+	   <<" q_weak_div:    "<<matB_q_weak_div.Height()<<" X "<<matB_q_weak_div.Width()<<endl
+	   <<" q_jump:        "<<matB_q_jump.Height()<<" X "<<matB_q_jump.Width()<<endl;
     cout<<endl<<"matrix in test space: "<<endl
-	   <<" V_inv:         "<<matVinv.Width()<<" X "<< matVinv.Height()<<endl
-	   <<" S_inv:         "<<matSinv.Width()<<" X "<< matSinv.Height()<<endl;
+	   <<" V_inv:         "<<matVinv.Height()<<" X "<< matVinv.Width()<<endl
+	   <<" S_inv:         "<<matSinv.Height()<<" X "<< matSinv.Width()<<endl;
+
+	ofstream myfileV("./pzc_data/Vinv.dat");
+	matVinv.PrintMatlab(myfileV);
+
+	ofstream myfileS("./pzc_data/Sinv.dat");
+	matSinv.PrintMatlab(myfileS);
+
+	ofstream myfileG("./pzc_data/G.dat");
+	matB_q_weak_div.PrintMatlab(myfileG);
+
+	ofstream myfileSum("./pzc_data/sum.dat");
+	matVSUM.PrintMatlab(myfileSum);
+	/************************************************/
 
    // 8. Set up the 1x2 block Least Squares DPG operator, 
    //    the normal equation operator, A = B^t InverseGram B, and
@@ -329,12 +419,12 @@ int main(int argc, char *argv[])
    //    B = mass_q     -u_dot_div 0        u_normal_jump
    //        q_weak_div  0         q_jump   0
    BlockOperator B(offsets_test, offsets);
-   B.SetBlock(0,0,&matB_mass_q);
-   B.SetBlock(0,1,&matB_u_dot_div);
-   B.SetBlock(0,3,&matB_u_normal_jump);
+   B.SetBlock(0, q0_var  ,&matB_mass_q);
+   B.SetBlock(0, u0_var  ,&matB_u_dot_div);
+   B.SetBlock(0, uhat_var,&matB_u_normal_jump);
 
-   B.SetBlock(1,0,&matB_q_weak_div);
-   B.SetBlock(1,2,&matB_q_jump);
+   B.SetBlock(1, q0_var   ,&matB_q_weak_div);
+   B.SetBlock(1, qhat_var ,&matB_q_jump);
 
    BlockOperator InverseGram(offsets_test, offsets_test);
    InverseGram.SetBlock(0,0,Vinv);
@@ -342,12 +432,71 @@ int main(int argc, char *argv[])
 
    RAPOperator A(B, InverseGram, B);
 
+/**************************************************/
+   /* non-zero pattern is not correct */
+   /* debug */
+//   Vector y(B.Height() );
+//   Vector vy(InverseGram.Height()  );
+//   Vector ry(x.Size() );
+//
+//   Vector z(x.Size() );
+//
+//
+//   B.Mult(x,y);
+//   InverseGram.Mult(y,vy);
+//
+//   for(int i=0;i<vtest_space->GetVSize();i++){
+//	 cout<<" y("<<i<<")= "<< y(i)<<endl
+//		 <<"vy("<<i<<")= "<<vy(i)<<endl
+//		 <<endl;
+//   }
+//   cout<<endl;
+//
+//   for(int i=vtest_space->GetVSize();i<vy.Size();i++){
+//	 cout<<" y("<<i<<")= "<< y(i)<<endl
+//		 <<"vy("<<i<<")= "<<vy(i)<<endl
+//		 <<endl;
+//   }
+//   cout<<endl;
+//
+//   B.MultTranspose(vy,ry);
+//   A.Mult(x,z);
+//
+////   for(int i=0;i<q0.Size();i++){
+//   for(int i=0;i<ry.Size();i++){
+//	 cout<<" z("<<i<<")= "<< z(i) <<endl
+//		 <<"ry("<<i<<")= "<<ry(i) <<endl
+//		 <<endl;
+//   }
+//   cout<<endl;
+   /* debug */
+/**************************************************/
+
    /* calculate right hand side b = B^T InverseGram F */
    {
 		Vector IGF(size_vtest + size_stest);
 		InverseGram.Mult(F,IGF);
 		B.MultTranspose(IGF,b);
 
+		/* debug */
+/**************************************************/
+//		Vector Ab(x.Size() );
+//		A.Mult(x,Ab);
+//		
+//		Vector b_res(x.Size() );
+//		subtract(b,Ab,b_res);
+//		for(int i=0; i<b.Size(); i++){
+//			cout<<"b("<<i<<") = "<<  b(i) <<endl
+//				<<"Ab("<<i<<")= "<< Ab(i) <<endl
+//				<<endl;
+//		}
+//		cout<<endl<<"residual: "<< b_res.Norml2()<<endl;
+//
+//		Vector Ab_res(x.Size() );
+//		A.Mult(b_res,Ab_res);
+//		cout<<"norm A * residual: "<< Ab_res.Norml2()<<endl
+//			<<endl;
+/**************************************************/
    }
    // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
    //   V0
@@ -419,11 +568,20 @@ int main(int argc, char *argv[])
 //   // 10. Solve the normal equation system using the PCG iterative solver.
 //   //     Check the weighted norm of residual for the DPG least square problem.
 //   //     Wrap the primal variable in a GridFunction for visualization purposes.
-     GMRES(A, P, b, x, 1, 1000, 1000, 1e-12, 0.0);
-//   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
 
-   GridFunction u0;
-   u0.MakeRef(u0_space, x.GetBlock(u0_var), 0);
+     CG(A,b,x,1,2000, 1e-12,0.);
+//     CG(A,b,x,0,2000, 1e-20,0.);
+//     CG(A,b,x,1,2000, 1e-20,0.);
+//     CG(A,b,x,1,2000, 0., 1e-10);
+//     CG(A,b,x,0,2000, 0., 1e-10);
+//     GMRES(A, P, b, x, 1, 1000, 1000, 1e-12, 1e-12);
+//     GMRES(A, P, b, x, 1, 1000, 1000, 0., 1e-12);
+//     GMRES(A, P, Ab, x, 1, 1000, 1000, 1e-12, 0.0);
+//   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
+//
+//   qhat = 1.;
+//   PCG(A, P, b, x, 1, 200, 1e-20, 1e-12);
+
 //
 //   {
 //      Vector LSres(s_test);
@@ -436,7 +594,10 @@ int main(int argc, char *argv[])
 //   // 10b. error 
    cout<< "\n dimension: "<<dim<<endl;
    cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
-   cout << "\n|| u_h - u ||_{L^2} = " << u0.ComputeL2Error(u_coeff) << '\n' << endl;
+   printf("\n|| u_h - u ||_{L^2} = %e \n",u0.ComputeL2Error(u_coeff) );
+   printf("\n|| q_h - u ||_{L^2} = %e \n",q0.ComputeL2Error(q_coeff) );
+   cout<<endl;
+//   cout << "\n|| u_h - u ||_{L^2} = " << u0.ComputeL2Error(u_coeff) << '\n' << endl;
 //
 //
    // 11. Save the refined mesh and the solution. This output can be viewed
@@ -485,6 +646,9 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
+//		return -12.*x(0)-12.*x(1) + 12.;
+		return -4.;
+//		return 0.;
 		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 	}
 	else if(x.Size() == 1){
@@ -502,6 +666,11 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
+//		return  2.*x(0)*x(0)*x(0) - 3.*x(0)*x(0)
+//			   +2.*x(1)*x(1)*x(1) - 3.*x(1)*x(1);
+		return  x(0)*x(0) + x(1) * x(1);
+//		return  1.;
+//		return  x(0) + x(1);
 		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
@@ -512,6 +681,51 @@ double u_exact(const Vector & x){
 		return 0;
 	}
 
+}
+
+/* exact q = -grad u */
+void q_exact(const Vector & x,Vector & f){
+	if(x.Size() == 2){
+		f(0) = -M_PI*cos(M_PI*x(0) ) * sin(M_PI*x(1) );
+		f(1) = -M_PI*sin(M_PI*x(0) ) * cos(M_PI*x(1) );
+
+//		f(0) = -1.;
+//		f(1) = -1.;
+
+		f(0) = -2.*x(0);
+		f(1) = -2.*x(1);
+
+//		f(0) = 6.*x(0)*(x(0)-1);
+//		f(1) = 6.*x(1)*(x(1)-1);
+
+//	    f = 0.;
+	}
+	else if(x.Size() == 1){
+		f(0) = -2.*M_PI * cos(2.*M_PI* x(0) );
+	}
+	else{
+		f  = 0.;
+	}
+}
+
+/* trace of q on square mesh */
+double q_trace_exact(const Vector &x){
+	double res = 0.;
+	if( (x(0) == 0)||(x(0)==1) ){
+//		res =  M_PI*sin(M_PI*x(0) ) * cos(M_PI*x(1) ) ;
+//		res = 2.* x(1);
+		res = +1.;
+
+		res = 0.;
+	}
+	else{
+//		res = -M_PI*cos(M_PI*x(0) ) * sin(M_PI*x(1) ) ;
+//		res = -2.*x(0);
+		res = -1.;
+
+		res = 0.;
+	}
+	return res;
 }
 
 /* vector 0 */

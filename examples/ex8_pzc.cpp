@@ -40,7 +40,6 @@ using namespace mfem;
 
 double f_exact(const Vector & x);
 double u_exact(const Vector & x);
-
 void q_exact(const Vector & x,Vector & f);
 
 double alpha_pzc = 100.;
@@ -300,6 +299,9 @@ int main(int argc, char *argv[])
    cout << "\n|| u_h - u ||_{L^2} = " << x0.ComputeL2Error(u_coeff) << '\n' << endl;
 
 
+
+
+
    // 11. Save the refined mesh and the solution. This output can be viewed
    //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
    {
@@ -347,6 +349,9 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
+		return 0.;
+		return 2.*( x(1)*(1-x(1) ) + x(0)*(1-x(0) ) );
+		return -2*x(0);
 		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
@@ -367,11 +372,15 @@ double f_exact(const Vector & x){
 
 }
 
+
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return  sin( M_PI * x(1) ); /* first index is 0 */
 //		return atan(alpha_pzc * x(1) );
+//		return x(0)*x(1)*x(1);
+		return x(0)*(x(1)+1);
+		return x(0)*(1-x(0) ) * x(1) * (1-x(1) ) + 1;
 		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
 		return 10. +  sin( M_PI * x(1) ); /* first index is 0 */
@@ -387,13 +396,16 @@ double u_exact(const Vector & x){
 
 }
 
+/* grad exact solution */
 void q_exact( const Vector & x, Vector & f){
 	if(x.Size() == 2){
+		f(0) = x(1)*x(1);
+		f(1) = 2.*x(1)*x(0);
 //		f(0) = 0.;
 //		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * x(1) * x(1) );
 		
-		f(0) = M_PI * cos(M_PI*x(0) );
-		f(1) = M_PI * cos(M_PI*x(1) );
+//		f(0) = M_PI * cos(M_PI*x(0) );
+//		f(1) = M_PI * cos(M_PI*x(1) );
 	}
 	else if(x.Size() == 1){
 		f(0) = 2.*M_PI*cos(2. * M_PI * x(0) );
