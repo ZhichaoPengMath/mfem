@@ -342,8 +342,15 @@ int main(int argc, char *argv[])
 		   Vector rhs_q(q0.Size() );
 		   GU.Mult(x0, rhs_q);
 		
-		
-		   CG(AQ, rhs_q, q0, 0, 200, 1e-12, 0.);
+
+		   BilinearForm *mass_q = new BilinearForm(q0_space);
+	   	   mass_q->AddDomainIntegrator( new VectorMassIntegrator() );
+	   	   mass_q->Assemble();
+	   	   mass_q->Finalize();
+	   	   SparseMatrix &PAQ = mass_q->SpMat();
+
+	       GSSmoother MQ(PAQ);	
+		   PCG(AQ, MQ, rhs_q, q0, 0, 200, 1e-12, 0.);
 		}	
 	   else{
 		    cout<<"L2 projection of grad u"<<endl;
@@ -363,9 +370,10 @@ int main(int argc, char *argv[])
 		    Vector rhs_q(q0.Size() );
 	   		grad_u->Mult(x0, rhs_q); 
 	
-	   		SparseMatrix &BQ = mass_q->SpMat();
+	   		SparseMatrix &AQ = mass_q->SpMat();
 	
-	   		CG( BQ, rhs_q, q0, 0 ,200, 1e-12, 0.);
+			GSSmoother MQ(AQ);	
+		   	PCG(AQ, MQ, rhs_q, q0, 0, 200, 1e-12, 0.);
 	   }
 	   VectorFunctionCoefficient q_coeff(dim, q_exact);
 	   error = q0.ComputeL2Error(q_coeff);
