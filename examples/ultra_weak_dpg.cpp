@@ -60,6 +60,7 @@ int main(int argc, char *argv[])
    const char *mesh_file = "../data/inline-quad-pzc.mesh";
    int order = 1;
    bool visualization = 1;
+   bool q_visual = 0;
    int ref_levels = -1;
    int divdiv_opt = 1;
    int gradgrad_opt = 0;
@@ -75,6 +76,9 @@ int main(int argc, char *argv[])
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                   "--no-visualization",
                   "Enable or disable GLVis visualization.");
+   args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
+                  "--no-visualization-for-grad-term",
+                  "Enable or disable GLVis visualization for grad term.");
    args.AddOption(&alpha_pzc, "-alpha", "--alpha",
                   "arctan( alpha * x) as exact solution");
    args.AddOption(&ref_levels, "-r", "--refine",
@@ -140,6 +144,7 @@ int main(int argc, char *argv[])
 	/* order of polynomial spaces */
    unsigned int trial_order = order;				
    unsigned int h1_trace_order = order + 1;
+//   unsigned int h1_trace_order = order ;
    unsigned int rt_trace_order = order;
    unsigned int test_order = order + dim;
 
@@ -391,12 +396,9 @@ int main(int argc, char *argv[])
    }
    cout<<"+||v||^2+||grad(v)||^2"
 	   <<endl<<endl;
-//   VSum->AddIntegrator(new VectorDiffusionIntegrator() ); /* debug */
 
 
    Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
-//   Vinv->AddDomainIntegrator(new DGDivDivIntegrator() );
-//   Vinv->AddDomainIntegrator(new VectorMassIntegrator() );
    Vinv->Assemble();
    Vinv->Finalize();
 
@@ -532,10 +534,11 @@ int main(int argc, char *argv[])
 
    SparseMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
    SparseMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+   *matV0 += *matV00;
+
    SparseMatrix * matS0  = RAP(matB_u_dot_div, matVinv, matB_u_dot_div);
    SparseMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
    SparseMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
-   *matV0 += *matV00;
    
    cout<<endl<<"Preconditioner matrix assembled"<<endl;
 
@@ -592,7 +595,7 @@ int main(int argc, char *argv[])
 
 //     CG(A,b,x,solver_print_opt,4000, 1e-16,0.);
 //   GMRES(A, P, b, x, solver_print_opt, 1000, 1000, 0., 1e-12);
-   PCG(A, P, b, x, solver_print_opt, 1000, 1e-20, 0.0);
+   PCG(A, P, b, x, solver_print_opt, 1000, 1e-18, 0.0);
 //   PCG(A, P, b, x, solver_print_opt, 1000, 1e-16, 0.0);
 
 
@@ -611,18 +614,30 @@ int main(int argc, char *argv[])
    printf("\n|| u_h - u ||_{L^2} = %e \n",u0.ComputeL2Error(u_coeff) );
    printf("\n|| q_h - u ||_{L^2} = %e \n",q0.ComputeL2Error(q_coeff) );
    cout<<endl;
+
+//   printf("\n\n");
+//   printf("\n|| u_h - u ||_{L^inf} = %e \n",u0.ComputeMaxError(u_coeff) );
+//   printf("\n|| q_h - u ||_{L^inf} = %e \n",q0.ComputeMaxError(q_coeff) );
 //   cout << "\n|| u_h - u ||_{L^2} = " << u0.ComputeL2Error(u_coeff) << '\n' << endl;
-//
-//
+//   cout<<endl;
+
+
    // 11. Save the refined mesh and the solution. This output can be viewed
    //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
    {
       ofstream mesh_ofs("refined.mesh");
       mesh_ofs.precision(8);
       mesh->Print(mesh_ofs);
+
       ofstream sol_ofs("sol.gf");
       sol_ofs.precision(8);
       u0.Save(sol_ofs);
+
+	  if(q_visual==1){
+         ofstream q_variable_ofs("sol_q.gf");
+         q_variable_ofs.precision(8);
+         q0.Save(q_variable_ofs);
+	  }
    }
 
    // 12. Send the solution by socket to a GLVis server.
@@ -633,6 +648,13 @@ int main(int argc, char *argv[])
       socketstream sol_sock(vishost, visport);
       sol_sock.precision(8);
       sol_sock << "solution\n" << *mesh << u0 << flush;
+
+	  if(q_visual==1){
+         socketstream q_sock(vishost, visport);
+         q_sock.precision(8);
+         q_sock << "solution\n" << *mesh << q0 << "window_title 'Solution q'" <<
+                endl;
+	  }
    }
 
 //   // 13. Free the used memory.
@@ -660,10 +682,14 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
+		return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
 //		return -12.*x(0)-12.*x(1) + 12.;
 //		return -4.;
 //		return 0.;
 		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
+	}
+	else if(x.Size() == 3){
+		return 12.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
 	}
 	else if(x.Size() == 1){
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
@@ -685,7 +711,11 @@ double u_exact(const Vector & x){
 //		return  x(0)*x(0) + x(1) * x(1);
 //		return  1.;
 //		return  x(0) + x(1);
+		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
 		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
+	}
+	else if(x.Size() ==3 ){
+		return x(0) + sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) ); 
 	}
 	else if(x.Size() == 1){
 //		return atan(alpha_pzc * x(0) );
@@ -700,8 +730,8 @@ double u_exact(const Vector & x){
 /* exact q = -grad u */
 void q_exact(const Vector & x,Vector & f){
 	if(x.Size() == 2){
-		f(0) = -M_PI*cos(M_PI*x(0) ) * sin(M_PI*x(1) );
-		f(1) = -M_PI*sin(M_PI*x(0) ) * cos(M_PI*x(1) );
+//		f(0) = -M_PI*cos(M_PI*x(0) ) * sin(M_PI*x(1) );
+//		f(1) = -M_PI*sin(M_PI*x(0) ) * cos(M_PI*x(1) );
 
 //		f(0) = -1.;
 //		f(1) = -1.;
@@ -713,6 +743,13 @@ void q_exact(const Vector & x,Vector & f){
 //		f(1) = 6.*x(1)*(x(1)-1);
 
 //	    f = 0.;
+		f(0) = -1. - 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		f(1) =     - 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
+	}
+	else if(x.Size() == 3){
+		f(0) = -1. - 2.*M_PI* cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
+		f(1) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
+		f(2) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * cos(2.*M_PI*x(2) );
 	}
 	else if(x.Size() == 1){
 		f(0) = -2.*M_PI * cos(2.*M_PI* x(0) );
