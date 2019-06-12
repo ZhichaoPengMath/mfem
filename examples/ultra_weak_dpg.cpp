@@ -370,13 +370,6 @@ int main(int argc, char *argv[])
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
    BilinearForm *Vinv = new BilinearForm(vtest_space);
 
-   BilinearForm *VSUM = new BilinearForm(vtest_space);
-   VSUM->AddDomainIntegrator(new VectorMassIntegrator() );
-   VSUM->AddDomainIntegrator(new VectorDiffusionIntegrator() );
-   VSUM->Assemble(); /* debug */
-   VSUM->Finalize(); /* debug */
-
-
    ConstantCoefficient const_divdiv( c_divdiv );          /* coefficients */
  
    SumIntegrator *VSum = new SumIntegrator;
@@ -417,10 +410,6 @@ int main(int argc, char *argv[])
 
    SparseMatrix &matVinv = Vinv->SpMat();
    SparseMatrix &matSinv = Sinv->SpMat();
-   SparseMatrix &matVSUM = VSUM->SpMat(); /* debug */
-//   SparseMatrix &output= VSUM->SpMat();
-   SparseMatrix *output=NULL;
-   Mult(matVinv,matVSUM,output);
 	
    cout<<endl<<endl<<"matrix dimensions: "<<endl
 	   <<" mass_q:        "<<matB_mass_q.Height()   <<" X "<<matB_mass_q.Width()<<endl
@@ -441,8 +430,6 @@ int main(int argc, char *argv[])
 	ofstream myfileG("./pzc_data/G.dat");
 	matB_q_weak_div.PrintMatlab(myfileG);
 
-	ofstream myfileSum("./pzc_data/sum.dat");
-	matVSUM.PrintMatlab(myfileSum);
 	/************************************************/
 
    // 8. Set up the 1x2 block Least Squares DPG operator, 
@@ -510,59 +497,60 @@ int main(int argc, char *argv[])
 		Vector IGF(size_vtest + size_stest);
 		InverseGram.Mult(F,IGF);
 		B.MultTranspose(IGF,b);
-
-		/* debug */
-/**************************************************/
-//		Vector Ab(x.Size() );
-//		A.Mult(x,Ab);
-//		
-//		Vector b_res(x.Size() );
-//		subtract(b,Ab,b_res);
-//		for(int i=0; i<b.Size(); i++){
-//			cout<<"b("<<i<<") = "<<  b(i) <<endl
-//				<<"Ab("<<i<<")= "<< Ab(i) <<endl
-//				<<endl;
-//		}
-//		cout<<endl<<"residual: "<< b_res.Norml2()<<endl;
-//
-//		Vector Ab_res(x.Size() );
-//		A.Mult(b_res,Ab_res);
-//		cout<<"norm A * residual: "<< Ab_res.Norml2()<<endl
-//			<<endl;
 /**************************************************/
    }
    // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
+   //   We use the standard Jacobian preconditionner
+   //
    //   V0
    //			S0 
    //					Vhat
    //							Shat
    //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
-   BilinearForm *V0 = new BilinearForm(q0_space);
-   V0->AddDomainIntegrator(new VectorDiffusionIntegrator(one));
-   V0->Assemble();
-   V0->Finalize();
+   //
 
-   BilinearForm *S0 = new BilinearForm(u0_space);
-   S0->AddDomainIntegrator(new DiffusionIntegrator(one));
-   S0->Assemble();
-   S0->Finalize();
+/***************************************************************/
+   /* the preconditioner here is not working */
+//   BilinearForm *V0 = new BilinearForm(q0_space);
+//   SumIntegrator * sumV0 = new SumIntegrator;
+//   sumV0->AddIntegrator(new VectorMassIntegrator() );
+//   sumV0->AddIntegrator(new DGDivDivIntegrator(one) );
+//   V0->AddDomainIntegrator(sumV0);
+//   V0->Assemble();
+//   V0->Finalize();
+
+//   BilinearForm *S0 = new BilinearForm(u0_space);
+//   S0->AddDomainIntegrator(new DiffusionIntegrator(one));
+//   S0->Assemble();
+//   S0->Finalize();
+
+//   SparseMatrix & matV0 = V0->SpMat();
+//   SparseMatrix & matS0 = S0->SpMat();
+
+/**************************************************************/
    
-   SparseMatrix & matV0 = V0->SpMat();
-   SparseMatrix & matS0 = S0->SpMat();
-   SparseMatrix * Vhat  = RAP(matB_q_jump, matSinv, matB_q_jump);
-   SparseMatrix * Shat  = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+
+   SparseMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
+   SparseMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+   SparseMatrix * matS0  = RAP(matB_u_dot_div, matVinv, matB_u_dot_div);
+   SparseMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
+   SparseMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+   *matV0 += *matV00;
+   
+   cout<<endl<<"Preconditioner matrix assembled"<<endl;
+
 #ifndef MFEM_USE_SUITESPARSE
    const double prec_rtol = 1e-3;
    const int prec_maxit = 200;
 
    CGSolver *V0inv = new CGSolver;
-   V0inv->SetOperator(matV0);
+   V0inv->SetOperator( *matV0 );
    V0inv->SetPrintLevel(-1);
    V0inv->SetRelTol(prec_rtol);
    V0inv->SetMaxIter(prec_maxit);
 
    CGSolver *S0inv = new CGSolver;
-   S0inv->SetOperator(matS0);
+   S0inv->SetOperator( *matS0 );
    S0inv->SetPrintLevel(-1);
    S0inv->SetRelTol(prec_rtol);
    S0inv->SetMaxIter(prec_maxit);
@@ -602,21 +590,20 @@ int main(int argc, char *argv[])
 //   //     Check the weighted norm of residual for the DPG least square problem.
 //   //     Wrap the primal variable in a GridFunction for visualization purposes.
 
-     CG(A,b,x,solver_print_opt,4000, 1e-12,0.);
+//     CG(A,b,x,solver_print_opt,4000, 1e-16,0.);
 //   GMRES(A, P, b, x, solver_print_opt, 1000, 1000, 0., 1e-12);
-//   PCG(A, P, b, x, solver_print_opt, 1000, 1e-12, 0.0);
+   PCG(A, P, b, x, solver_print_opt, 1000, 1e-20, 0.0);
+//   PCG(A, P, b, x, solver_print_opt, 1000, 1e-16, 0.0);
 
-//   qhat = 1.;
-//   PCG(A, P, b, x, 1, 200, 1e-20, 1e-12);
 
 //
-//   {
-//      Vector LSres(s_test);
-//      B.Mult(x, LSres);
-//      LSres -= F;
-//      double res = sqrt(matSinv.InnerProduct(LSres, LSres));
-//      cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
-//   }
+   {
+      Vector LSres(F.Size() );
+      B.Mult(x, LSres);
+      LSres -= F;
+      double res = sqrt(matSinv.InnerProduct(LSres, LSres));
+      cout << "\n|| Bx - F ||_{S^-1} = " << res << endl;
+   }
 //
 //   // 10b. error 
    cout<< "\n dimension: "<<dim<<endl;
