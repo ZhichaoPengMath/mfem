@@ -51,6 +51,8 @@ int main(int argc, char *argv[])
    int order = 1;
    bool visualization = 1;
    int ref_levels = -1;
+   int compute_q = 0;
+   double error = -1.;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -63,7 +65,10 @@ int main(int argc, char *argv[])
    args.AddOption(&alpha_pzc, "-alpha", "--alpha",
                   "arctan( alpha * x) as exact solution");
    args.AddOption(&ref_levels, "-r", "--refine",
-                  "Number of times to refine the mesh uniformly, -1 for auto.");
+                  "Number of times to refine the mesh uniformly");
+   args.AddOption(&compute_q, "-cq", "--cq",
+                  "compute q = grad(u) or not, 2 use L2 projection of grad(u), 1 use DPG, 0 by default do not compute it ");
+
 
    args.Parse();
    if (!args.Good())
@@ -290,13 +295,91 @@ int main(int argc, char *argv[])
       B.Mult(x, LSres);
       LSres -= F;
       double res = sqrt(matSinv.InnerProduct(LSres, LSres));
-      cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
+      cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl <<endl;
    }
+  // 10.5: Compute Grad terms based on the solution x
+  // Compute throught DPG formulation
+  // (q,\tau) - (\grad u,\tau ) = 0
 
-   // 10b. error 
+   if( compute_q ){
+	   FiniteElementCollection * q0_fec = new L2_FECollection(trial_order, dim);
+	   
+	   FiniteElementSpace * q0_space    = new FiniteElementSpace(mesh, q0_fec, dim);
+	   FiniteElementSpace * vtest_space = new FiniteElementSpace(mesh, test_fec, dim);
+	
+	   GridFunction q0(q0_space);
+	   if(compute_q == 2){
+		   cout<<" project grad u to optimal test space"<<endl;
+	  
+		   /* Bilinear Form */
+		   BilinearForm * Vinv = new BilinearForm(vtest_space);
+		   Vinv->AddDomainIntegrator( new InverseIntegrator
+		      							(new VectorMassIntegrator() ) );
+		   Vinv->Assemble();
+		   Vinv->Finalize();
+		
+		   /* -(\grad u,\tau ) */
+		   MixedBilinearForm * B_ne_grad_u = new MixedBilinearForm(x0_space, vtest_space);
+		   B_ne_grad_u->AddDomainIntegrator( new TransposeIntegrator
+													(new DGVectorWeakDivergenceIntegrator() )  );
+		   B_ne_grad_u->Assemble();
+		   B_ne_grad_u->Finalize();
+		
+		   /* (q,tau) */
+		   MixedBilinearForm * B_mass_q = new MixedBilinearForm(q0_space, vtest_space);
+		   B_mass_q->AddDomainIntegrator( new VectorMassIntegrator() );
+		   B_mass_q->Assemble();
+		   B_mass_q->Finalize();
+		
+		   SparseMatrix &matB_mass_q    = B_mass_q->SpMat();
+		   SparseMatrix &matB_Vinv      = Vinv->SpMat();
+		   SparseMatrix &matB_grad_u = B_ne_grad_u->SpMat();
+		   matB_grad_u *= -1.;
+		
+		   RAPOperator AQ( matB_mass_q, matB_Vinv, matB_mass_q);
+		   RAPOperator GU( matB_mass_q, matB_Vinv, matB_grad_u);
+		
+		   Vector rhs_q(q0.Size() );
+		   GU.Mult(x0, rhs_q);
+		
+		
+		   CG(AQ, rhs_q, q0, 0, 200, 1e-12, 0.);
+		}	
+	   else{
+		    cout<<"L2 projection of grad u"<<endl;
+
+			BilinearForm *mass_q = new BilinearForm(q0_space);
+	   		mass_q->AddDomainIntegrator( new VectorMassIntegrator() );
+	   		mass_q->Assemble();
+	   		mass_q->Finalize();
+	
+	   		MixedBilinearForm * grad_u = new MixedBilinearForm(x0_space, q0_space);
+	   		grad_u->AddDomainIntegrator( new TransposeIntegrator
+	   		 								(new DGVectorWeakDivergenceIntegrator() )    );
+	   		grad_u->Assemble();
+	   		grad_u->Finalize();
+	   		grad_u->SpMat() *= -1.;
+	
+		    Vector rhs_q(q0.Size() );
+	   		grad_u->Mult(x0, rhs_q); 
+	
+	   		SparseMatrix &BQ = mass_q->SpMat();
+	
+	   		CG( BQ, rhs_q, q0, 0 ,200, 1e-12, 0.);
+	   }
+	   VectorFunctionCoefficient q_coeff(dim, q_exact);
+	   error = q0.ComputeL2Error(q_coeff);
+	}	
+
+/*******************************************************************************/
+   // 10.75 error 
+
    cout<< "\n dimension: "<<dim<<endl;
    cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
-   cout << "\n|| u_h - u ||_{L^2} = " << x0.ComputeL2Error(u_coeff) << '\n' << endl;
+   printf("\n|| u_h - u ||_{L^2} =%e\n\n",x0.ComputeL2Error(u_coeff) );
+   if(compute_q){
+	   printf("\n|| q_h - q ||_{L^2} =%e\n\n",error );
+   }
 
 
 
@@ -349,9 +432,10 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return 0.;
-		return 2.*( x(1)*(1-x(1) ) + x(0)*(1-x(0) ) );
-		return -2*x(0);
+//		return 0.;
+//		return 2.*( x(1)*(1-x(1) ) + x(0)*(1-x(0) ) );
+//		return -2*x(0);
+
 		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
@@ -378,13 +462,10 @@ double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return  sin( M_PI * x(1) ); /* first index is 0 */
 //		return atan(alpha_pzc * x(1) );
+
 //		return x(0)*x(1)*x(1);
-		return x(0)*(x(1)+1);
-		return x(0)*(1-x(0) ) * x(1) * (1-x(1) ) + 1;
+
 		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
-		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
-		return 10. +  sin( M_PI * x(1) ); /* first index is 0 */
-//		return sin(2.*M_PI* x(0) ) + sin(2.*M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
 //		return atan(alpha_pzc * x(0) );
@@ -399,8 +480,12 @@ double u_exact(const Vector & x){
 /* grad exact solution */
 void q_exact( const Vector & x, Vector & f){
 	if(x.Size() == 2){
-		f(0) = x(1)*x(1);
-		f(1) = 2.*x(1)*x(0);
+		f(0) = M_PI*cos(M_PI*x(0) ) * sin( M_PI* x(1) );
+		f(1) = M_PI*sin(M_PI*x(0) ) * cos( M_PI* x(1) );
+
+//		f(0) = x(1)*x(1);
+//		f(1) = 2.*x(1)*x(0);
+
 //		f(0) = 0.;
 //		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * x(1) * x(1) );
 		

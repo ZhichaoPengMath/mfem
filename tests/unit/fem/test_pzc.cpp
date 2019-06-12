@@ -22,12 +22,26 @@ namespace bilininteg_pzc{
 /*****************************************
  * Manufacture solutions for test
  * ***************************************/
-double f2(const Vector & x) { return 2.345 * x[0] + 3.579 * x[1]; }
+double f2(const Vector & x) { 
+	return 2.345 * x[0] + 3.579 * x[1]; 
+}
 void Grad_f2(const Vector & x, Vector & df)
 {
    df.SetSize(2);
    df[0] = 2.345;
    df[1] = 3.579;
+
+}
+
+double f22(const Vector & x){
+	return sin(x[0]) + sin(x[1]);
+}
+
+void Grad_f22(const Vector & x, Vector &df)
+{
+	df.SetSize(2);
+   df[0] = cos(x[0]);
+   df[1] = cos(x[1]);
 }
 
 double f3(const Vector & x) { return x[0]*(2.-x[0]) *  x[1]*(3.-x[1]); }
@@ -314,10 +328,6 @@ TEST_CASE("Test for the DPG face integrators",
    cout<<endl<<"trace number: "<<2*n*(n+1)<<endl
 	   <<"trace dof: "<<f2_trace.Size()<<endl
 	   <<endl;
-	cout<<"trace:"<<endl;
-	for(int i=0; i<f2_trace.Size(); i++){
-		cout<<" "<<i<<": "<< f2_trace(i) <<endl;
-	}
 
     cout<<endl<<" coefficients obtained "<<endl;
 
