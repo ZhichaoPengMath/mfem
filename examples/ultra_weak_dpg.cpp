@@ -658,7 +658,43 @@ int main(int argc, char *argv[])
    }
 
 //   // 13. Free the used memory.
-//   delete S0inv;
+	/* bilinear form */
+   delete B_mass_q;
+   delete B_u_dot_div;
+   delete B_u_normal_jump;
+   delete B_q_weak_div;
+   delete B_q_jump;
+
+   delete Vinv;
+   delete Sinv; 
+
+   delete matV00;
+   delete matV0;
+   delete matS0;
+   delete Vhat;
+   delete Shat;
+
+   /* preconditionner */
+   delete V0inv;
+   delete S0inv;
+   delete Vhatinv;
+   delete Shatinv;
+   /* finite element collection */
+   delete u0_fec;
+   delete q0_fec;
+   delete uhat_fec;
+   delete qhat_fec;
+   delete vtest_fec;
+   delete stest_fec;
+
+   /* finite element spaces */
+   delete u0_space;
+   delete q0_space;
+   delete uhat_space;
+   delete qhat_space;
+   delete vtest_space;
+   delete stest_space;
+
 //   delete Shatinv;
 //   delete Shat;
 //   delete Bhat;
