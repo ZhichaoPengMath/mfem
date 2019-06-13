@@ -546,14 +546,14 @@ int main(int argc, char *argv[])
    // We want to approximate them.
 /***************************************************************/
    /* the preconditioner here is not working */
-   BilinearForm *V0 = new BilinearForm(q0_space);
-   SumIntegrator * sumV0 = new SumIntegrator;
-   sumV0->AddIntegrator(new VectorMassIntegrator() );
-   V0->AddDomainIntegrator(sumV0);
-   V0->Assemble();
-   V0->Finalize();
-
-   SparseMatrix & AmatV0 = V0->SpMat();
+//   BilinearForm *V0 = new BilinearForm(q0_space);
+//   SumIntegrator * sumV0 = new SumIntegrator;
+//   sumV0->AddIntegrator(new VectorMassIntegrator() );
+//   V0->AddDomainIntegrator(sumV0);
+//   V0->Assemble();
+//   V0->Finalize();
+//
+//   SparseMatrix & AmatV0 = V0->SpMat();
 
    BilinearForm *S0 = new BilinearForm(u0_space);
    S0->AddDomainIntegrator(new MassIntegrator() );
@@ -570,7 +570,7 @@ int main(int argc, char *argv[])
    SparseMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
    *matV0 += *matV00;
 
-   SparseMatrix * matS0  = RAP(matB_u_dot_div, matVinv, matB_u_dot_div);
+//   SparseMatrix * matS0  = RAP(matB_u_dot_div, matVinv, matB_u_dot_div);
 
    SparseMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
    SparseMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
@@ -725,11 +725,11 @@ int main(int argc, char *argv[])
    delete Vinv;
    delete Sinv; 
 
-//   delete matV00;
-//   delete matV0;
+   delete matV00;
+   delete matV0;
 //   delete matS0;
-//   delete Vhat;
-//   delete Shat;
+   delete Vhat;
+   delete Shat;
 
    /* preconditionner */
    delete V0inv;
