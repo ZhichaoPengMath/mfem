@@ -65,8 +65,11 @@ int main(int argc, char *argv[])
    int divdiv_opt = 1;
    int gradgrad_opt = 0;
    int solver_print_opt = 0;
+   int h1_trace_opt = 0;/* use lower order h1_trace term */
+   int rt_trace_opt = 0;/* use lower order rt_trace term */
 
    double c_divdiv = 1.;
+   double c_gradgrad = 1.;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -89,8 +92,17 @@ int main(int argc, char *argv[])
                   "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
    args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
                   "printing option for linear solver, 0 by default");
+
    args.AddOption(&c_divdiv, "-c_divdiv", "--c_divdiv",
                   "constant to penalize divdiv in the test norm, 1. by default");
+   args.AddOption(&c_gradgrad, "-c_gradgrad", "--c_gradgrad",
+                  "constant to penalize gradgrad in the test norm, 1. by default");
+
+   args.AddOption(&h1_trace_opt, "-h1_trace", "--h1_trace",
+				  " use lower order h1 trace or not, 0 by default");
+   args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
+				  " use lower order rt trace or not, 0 by default");
+
 
    args.Parse();
    if (!args.Good())
@@ -144,9 +156,15 @@ int main(int argc, char *argv[])
 	/* order of polynomial spaces */
    unsigned int trial_order = order;				
    unsigned int h1_trace_order = order + 1;
-//   unsigned int h1_trace_order = order ;
-   unsigned int rt_trace_order = order;
+   unsigned int rt_trace_order = order ;
    unsigned int test_order = order + dim;
+
+   if(h1_trace_opt){
+	 h1_trace_order --;
+   }
+   if(rt_trace_opt){
+	  rt_trace_order --;
+   }
 
    FiniteElementCollection * u0_fec, * q0_fec, * uhat_fec, *qhat_fec, * vtest_fec, * stest_fec;
 
@@ -376,6 +394,7 @@ int main(int argc, char *argv[])
    BilinearForm *Vinv = new BilinearForm(vtest_space);
 
    ConstantCoefficient const_divdiv( c_divdiv );          /* coefficients */
+   ConstantCoefficient const_gradgrad( c_gradgrad );          /* coefficients */
  
    SumIntegrator *VSum = new SumIntegrator;
    VSum->AddIntegrator(new VectorMassIntegrator() );
@@ -386,16 +405,6 @@ int main(int argc, char *argv[])
 		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
    }
 
-   cout<<"test norm: "<<endl
-	   <<"|| (tau,v) ||_V^2 = || tau ||^2";
-   if(divdiv_opt==1){
-	   cout<<"+|| div(tau) ||^2";
-   }
-   if(gradgrad_opt==1){
-	   cout<<"+|| grad(tau) ||^2";
-   }
-   cout<<"+||v||^2+||grad(v)||^2"
-	   <<endl<<endl;
 
 
    Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
@@ -405,10 +414,32 @@ int main(int argc, char *argv[])
    BilinearForm *Sinv = new BilinearForm(stest_space);
    SumIntegrator *SSum = new SumIntegrator;
    SSum->AddIntegrator(new MassIntegrator(one) );
-   SSum->AddIntegrator(new DiffusionIntegrator(one));
+   SSum->AddIntegrator(new DiffusionIntegrator(const_gradgrad) );
    Sinv->AddDomainIntegrator(new InverseIntegrator(SSum));
    Sinv->Assemble();
    Sinv->Finalize();
+
+   cout<<"test norm: "<<endl
+	   <<"|| (tau,v) ||_V^2 = || tau ||^2";
+   if(divdiv_opt==1){
+	   if(c_divdiv==1.){
+			cout<<"+|| div(tau) ||^2";
+	   }
+	   else{
+			cout<<"+"<<c_divdiv<<"|| div(tau) ||^2";
+	   }
+   }
+   if(gradgrad_opt==1){
+	   cout<<"+|| grad(tau) ||^2";
+   }
+   cout<<"+||v||^2";
+   if(c_gradgrad ==1.){
+	   cout<<"+||grad(v)||^2";
+   }
+   else{
+	   cout<<"+"<<c_gradgrad<<"||grad(v)||^2";
+   }
+   cout<<endl<<endl;
 
    SparseMatrix &matVinv = Vinv->SpMat();
    SparseMatrix &matSinv = Sinv->SpMat();
@@ -577,10 +608,10 @@ int main(int argc, char *argv[])
    Vhatinv->iterative_mode = false;
    Shatinv->iterative_mode = false;
 #else
-   Operator *V0inv = new UMFPackSolver(matV0);
+   Operator *V0inv = new UMFPackSolver( *matV0);
    Operator *Vhatinv = new UMFPackSolver(*Vhat);
 
-   Operator *S0inv = new UMFPackSolver(matS0);
+   Operator *S0inv = new UMFPackSolver(*matS0);
    Operator *Shatinv = new UMFPackSolver(*Shat);
 #endif
    BlockDiagonalPreconditioner P(offsets);

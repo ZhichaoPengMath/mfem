@@ -1,4 +1,4 @@
-//                                MFEM Example 8
+////                                MFEM Example 8
 //
 // Compile with: make ex8_pzc
 //
@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
    int ref_levels = -1;
    int compute_q = 0;
    double error = -1.;
+   int  trace_opt = 0;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -67,7 +68,9 @@ int main(int argc, char *argv[])
    args.AddOption(&ref_levels, "-r", "--refine",
                   "Number of times to refine the mesh uniformly");
    args.AddOption(&compute_q, "-cq", "--cq",
-                  "compute q = grad(u) or not, 2 use L2 projection of grad(u), 1 use DPG, 0 by default do not compute it ");
+                  "compute q = grad(u) or not, 1 use L2 projection of grad(u), 2 use DPG, 0 by default do not compute it ");
+   args.AddOption(&trace_opt, "-trace", "--trace",
+                  "trace_order = trial_order, by default trace_order = trial_order - 1 ");
 
 
    args.Parse();
@@ -109,6 +112,9 @@ int main(int argc, char *argv[])
    //      the mesh and the trial space order.
    unsigned int trial_order = order;
    unsigned int trace_order = order - 1;
+   if(trace_opt){
+		trace_order++;
+   }
    unsigned int test_order  = order; /* reduced order, full order is
                                         (order + dim - 1) */
    if (dim == 2 && (order%2 == 0 || (mesh->MeshGenerator() & 2 && order > 1)))
@@ -288,7 +294,8 @@ int main(int argc, char *argv[])
    // 10. Solve the normal equation system using the PCG iterative solver.
    //     Check the weighted norm of residual for the DPG least square problem.
    //     Wrap the primal variable in a GridFunction for visualization purposes.
-   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
+//   PCG(A, P, b, x, 1, 200, 1e-12, 0.0);
+   PCG(A, P, b, x, 1 , 1000, 1e-18, 0.0);
 
    {
       Vector LSres(s_test);
@@ -440,17 +447,12 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-//		return 0.;
-//		return 2.*( x(1)*(1-x(1) ) + x(0)*(1-x(0) ) );
-//		return -2*x(0);
+		return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
 
-		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
+//		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
 //				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
-
-		return M_PI * M_PI * ( sin(M_PI*x(0) ) + sin( M_PI*x(1) ) ); /* first index is 0 */
-		return M_PI * M_PI *sin( M_PI*x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
@@ -468,12 +470,10 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-//		return  sin( M_PI * x(1) ); /* first index is 0 */
 //		return atan(alpha_pzc * x(1) );
 
-//		return x(0)*x(1)*x(1);
-
-		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
+		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+//		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
 //		return atan(alpha_pzc * x(0) );
@@ -488,17 +488,15 @@ double u_exact(const Vector & x){
 /* grad exact solution */
 void q_exact( const Vector & x, Vector & f){
 	if(x.Size() == 2){
-		f(0) = M_PI*cos(M_PI*x(0) ) * sin( M_PI* x(1) );
-		f(1) = M_PI*sin(M_PI*x(0) ) * cos( M_PI* x(1) );
+		f(0) = +1. + 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
 
-//		f(0) = x(1)*x(1);
-//		f(1) = 2.*x(1)*x(0);
+//		f(0) = M_PI*cos(M_PI*x(0) ) * sin( M_PI* x(1) );
+//		f(1) = M_PI*sin(M_PI*x(0) ) * cos( M_PI* x(1) );
 
 //		f(0) = 0.;
 //		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * x(1) * x(1) );
 		
-//		f(0) = M_PI * cos(M_PI*x(0) );
-//		f(1) = M_PI * cos(M_PI*x(1) );
 	}
 	else if(x.Size() == 1){
 		f(0) = 2.*M_PI*cos(2. * M_PI * x(0) );
