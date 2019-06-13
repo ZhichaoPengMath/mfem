@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
    bool visualization = 1;
    bool q_visual = 0;
    int ref_levels = -1;
-   int divdiv_opt = 1;
+//   int divdiv_opt = 1;
    int gradgrad_opt = 0;
    int solver_print_opt = 0;
    int h1_trace_opt = 0;/* use lower order h1_trace term */
@@ -86,8 +86,8 @@ int main(int argc, char *argv[])
                   "arctan( alpha * x) as exact solution");
    args.AddOption(&ref_levels, "-r", "--refine",
                   "Number of times to refine the mesh uniformly, -1 by default.");
-   args.AddOption(&divdiv_opt, "-divdiv", "--divdiv",
-                  "Whether add || ||_{H(div)} in the test norm or not, 1 by default");
+//   args.AddOption(&divdiv_opt, "-divdiv", "--divdiv",
+//                  "Whether add || ||_{H(div)} in the test norm or not, 1 by default");
    args.AddOption(&gradgrad_opt, "-gradgrad", "--gradgrad",
                   "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
    args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
@@ -398,9 +398,7 @@ int main(int argc, char *argv[])
  
    SumIntegrator *VSum = new SumIntegrator;
    VSum->AddIntegrator(new VectorMassIntegrator() );
-   if(divdiv_opt==1){
-		VSum->AddIntegrator(new DGDivDivIntegrator(const_divdiv) );
-   }
+   VSum->AddIntegrator(new DGDivDivIntegrator(const_divdiv) );
    if(gradgrad_opt==1){
 		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
    }
@@ -421,13 +419,11 @@ int main(int argc, char *argv[])
 
    cout<<"test norm: "<<endl
 	   <<"|| (tau,v) ||_V^2 = || tau ||^2";
-   if(divdiv_opt==1){
-	   if(c_divdiv==1.){
-			cout<<"+|| div(tau) ||^2";
-	   }
-	   else{
-			cout<<"+"<<c_divdiv<<"|| div(tau) ||^2";
-	   }
+   if(c_divdiv==1.){
+    	cout<<"+|| div(tau) ||^2";
+   }
+   else{
+    	cout<<"+"<<c_divdiv<<"|| div(tau) ||^2";
    }
    if(gradgrad_opt==1){
 	   cout<<"+|| grad(tau) ||^2";
@@ -454,14 +450,6 @@ int main(int argc, char *argv[])
 	   <<" V_inv:         "<<matVinv.Height()<<" X "<< matVinv.Width()<<endl
 	   <<" S_inv:         "<<matSinv.Height()<<" X "<< matSinv.Width()<<endl;
 
-	ofstream myfileV("./pzc_data/Vinv.dat");
-	matVinv.PrintMatlab(myfileV);
-
-	ofstream myfileS("./pzc_data/Sinv.dat");
-	matSinv.PrintMatlab(myfileS);
-
-	ofstream myfileG("./pzc_data/G.dat");
-	matB_q_weak_div.PrintMatlab(myfileG);
 
 	/************************************************/
 
@@ -533,7 +521,7 @@ int main(int argc, char *argv[])
 /**************************************************/
    }
    // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
-   //   We use the standard Jacobian preconditionner
+   //   We use the "Jacobian" preconditionner
    //
    //   V0
    //			S0 
@@ -541,35 +529,70 @@ int main(int argc, char *argv[])
    //							Shat
    //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
    //
-
+   //  Actually, the exact blocks are
+   //		V0 = B_q_weak_div^T S^-1 B_q_weak_div
+   //		    +Mass_q^T  V^-1  Mass_q
+   //
+   //		S0 = u_dot_div^T  S^-1  u_dot_div
+   //  
+   //       Vhat = u_normal_jump^T V^-1 u_normal_jump
+   //
+   //       Vhat = q_jump^T S^-1 q_jump.
+   //
+   //       One interesting fact:
+   //			V0 \approx Mass
+   //			S0 \approx Mass
+   //
+   // We want to approximate them.
 /***************************************************************/
    /* the preconditioner here is not working */
-//   BilinearForm *V0 = new BilinearForm(q0_space);
-//   SumIntegrator * sumV0 = new SumIntegrator;
-//   sumV0->AddIntegrator(new VectorMassIntegrator() );
-//   sumV0->AddIntegrator(new DGDivDivIntegrator(one) );
-//   V0->AddDomainIntegrator(sumV0);
-//   V0->Assemble();
-//   V0->Finalize();
+   BilinearForm *V0 = new BilinearForm(q0_space);
+   SumIntegrator * sumV0 = new SumIntegrator;
+   sumV0->AddIntegrator(new VectorMassIntegrator() );
+   V0->AddDomainIntegrator(sumV0);
+   V0->Assemble();
+   V0->Finalize();
 
-//   BilinearForm *S0 = new BilinearForm(u0_space);
-//   S0->AddDomainIntegrator(new DiffusionIntegrator(one));
-//   S0->Assemble();
-//   S0->Finalize();
+   SparseMatrix & AmatV0 = V0->SpMat();
 
-//   SparseMatrix & matV0 = V0->SpMat();
-//   SparseMatrix & matS0 = S0->SpMat();
+   BilinearForm *S0 = new BilinearForm(u0_space);
+   S0->AddDomainIntegrator(new MassIntegrator() );
+   S0->Assemble();
+   S0->Finalize();
+
+   SparseMatrix & AmatS0 = S0->SpMat();
 
 /**************************************************************/
    
 
+	// the exact form of the diagonal block //
    SparseMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
    SparseMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
    *matV0 += *matV00;
 
    SparseMatrix * matS0  = RAP(matB_u_dot_div, matVinv, matB_u_dot_div);
+
    SparseMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
    SparseMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+
+
+   /* debug */
+/****************************************************************/
+//   matV0->Add(-1.,AmatV0);
+//   AmatS0.Add(-1.,*matS0);
+//   cout<<" difference between approximate one and exact one: "<<endl;
+//   printf(" V0: %e \n S0: %e \n\n",
+//		   AmatV0.MaxNorm(),
+//		   AmatS0.MaxNorm()
+//		 );
+
+//	ofstream myfileV("./pzc_data/V0.dat");
+//	AmatV0.PrintMatlab(myfileV);
+//	matV0->PrintMatlab(myfileV);
+
+//	ofstream myfileS("./pzc_data/S0.dat");
+//	matS0->PrintMatlab(myfileS);
+/**************************************************************/
    
    cout<<endl<<"Preconditioner matrix assembled"<<endl;
 
@@ -579,12 +602,14 @@ int main(int argc, char *argv[])
 
    CGSolver *V0inv = new CGSolver;
    V0inv->SetOperator( *matV0 );
+//   V0inv->SetOperator( AmatV0 );
    V0inv->SetPrintLevel(-1);
    V0inv->SetRelTol(prec_rtol);
    V0inv->SetMaxIter(prec_maxit);
 
    CGSolver *S0inv = new CGSolver;
-   S0inv->SetOperator( *matS0 );
+//   S0inv->SetOperator( *matS0 );
+   S0inv->SetOperator( AmatS0 );
    S0inv->SetPrintLevel(-1);
    S0inv->SetRelTol(prec_rtol);
    S0inv->SetMaxIter(prec_maxit);
@@ -609,9 +634,10 @@ int main(int argc, char *argv[])
    Shatinv->iterative_mode = false;
 #else
    Operator *V0inv = new UMFPackSolver( *matV0);
+//   Operator *V0inv = new UMFPackSolver(AmatV0);
    Operator *Vhatinv = new UMFPackSolver(*Vhat);
 
-   Operator *S0inv = new UMFPackSolver(*matS0);
+   Operator *S0inv = new UMFPackSolver(AmatS0);
    Operator *Shatinv = new UMFPackSolver(*Shat);
 #endif
    BlockDiagonalPreconditioner P(offsets);
@@ -699,11 +725,11 @@ int main(int argc, char *argv[])
    delete Vinv;
    delete Sinv; 
 
-   delete matV00;
-   delete matV0;
-   delete matS0;
-   delete Vhat;
-   delete Shat;
+//   delete matV00;
+//   delete matV0;
+//   delete matS0;
+//   delete Vhat;
+//   delete Shat;
 
    /* preconditionner */
    delete V0inv;
