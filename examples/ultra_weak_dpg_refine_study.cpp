@@ -515,8 +515,8 @@ int main(int argc, char *argv[])
 	      dual_norm_error(ref_i) = sqrt(matSinv.InnerProduct(LSres, LSres));
 	   }
 	   // 10b. error 
-	   u_l2_error(ref_i) = u0.ComputeL2Error(u_coeff) ;
-	   q_l2_error(ref_i) = q0.ComputeL2Error(q_coeff) ;
+	   u_l2_error(ref_i) = fabs(u0.ComputeL2Error(u_coeff) ) ;
+	   q_l2_error(ref_i) = fabs(q0.ComputeL2Error(q_coeff) ) ;
 
 		// 11. Save the refined mesh and the solution. This output can be viewed
    		//     later using GLVis: "glvis -m refined.mesh -g sol.gf".
@@ -595,7 +595,6 @@ int main(int argc, char *argv[])
 	   cout<<endl<<" refinement "<<ref_i<<" complete"<<endl;
 	}
    //15 show results
-   // 17. Print the results
    std::cout<< endl<<endl<<" original element number: "<< org_element_number<<endl<<endl;
    std::cout << "------------------------------------------------------------------------\n";
    std::cout <<
