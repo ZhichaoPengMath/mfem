@@ -404,12 +404,17 @@ int main(int argc, char *argv[])
 
 		   CGSolver qcg(MPI_COMM_WORLD);
 		   qcg.SetOperator(*AQ);
-//		   qcg.SetPreconditioner(*MQ);
+		   qcg.SetPreconditioner(*MQ);
 		   qcg.SetRelTol(1e-10);
 		   qcg.SetMaxIter(200);
 		   qcg.SetPrintLevel(1);
 		   qcg.Mult(rhs_q, q0);
-//		   q0 *= -1.;
+
+		   delete AQ;
+		   delete MQ;
+		   delete Vinv;
+		   delete B_mass_q;
+		   delete B_ne_grad_u;
 		}	
 	   else{
 		    cout<<"L2 projection of grad u"<<endl;
@@ -438,6 +443,7 @@ int main(int argc, char *argv[])
 
 	   		HypreParMatrix *AQ = mass_q->ParallelAssemble(); delete mass_q;
 		    HypreBoomerAMG *MQ = new HypreBoomerAMG(*AQ);
+			MQ->SetPrintLevel(0);
 
 			/* debug */
 //			HypreParMatrix * mat_grad_u = grad_u->ParallelAssemble(); //delete grad_u;
@@ -465,8 +471,12 @@ int main(int argc, char *argv[])
 			qcg.SetMaxIter(200);
 			qcg.SetPrintLevel(0);
 			qcg.SetOperator( *AQ);
-//			qcg.SetPreconditioner(*MQ);
+			qcg.SetPreconditioner(*MQ);
 			qcg.Mult( rhs_q, q0);
+
+			delete AQ;
+			delete MQ;
+			delete grad_u;
 	   }
 	   VectorFunctionCoefficient q_coeff(dim, q_exact);
 //	   q0.ProjectCoefficient(q_coeff);
