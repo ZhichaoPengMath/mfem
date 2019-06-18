@@ -474,8 +474,8 @@ int main(int argc, char *argv[])
    B.SetBlock(1, qhat_var ,&matB_q_jump);
 
    BlockOperator InverseGram(offsets_test, offsets_test);
-   InverseGram.SetBlock(0,0,matVinv);
-   InverseGram.SetBlock(1,1,matSinv);
+   InverseGram.SetBlock(0,0,&matVinv);
+   InverseGram.SetBlock(1,1,&matSinv);
 
    RAPOperator A(B, InverseGram, B);
 
@@ -665,9 +665,11 @@ int main(int argc, char *argv[])
 //
    {
       Vector LSres(F.Size() );
+      Vector tmp(F.Size() );
       B.Mult(x, LSres);
       LSres -= F;
-      double res = sqrt(InverseGram.InnerProduct(LSres, LSres));
+	  InverseGram.Mult(LSres,tmp);
+      double res = sqrt( InnerProduct(LSres, tmp) );
       cout << "\n|| Bx - F ||_{S^-1} = " << res << endl;
    }
 //
