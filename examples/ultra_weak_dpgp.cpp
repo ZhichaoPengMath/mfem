@@ -265,7 +265,7 @@ int main(int argc, char *argv[])
    ParGridFunction q0(q0_space);
 
    ParGridFunction uhat;
-   uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
+   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
@@ -332,7 +332,7 @@ int main(int argc, char *argv[])
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
    B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_dof_list, uhat, F);
-//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F); /* not working */
+//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
 
    if(myid == 0){
@@ -540,7 +540,7 @@ int main(int argc, char *argv[])
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);
 	      LSres -= F;
-	      matSinv->Mult(LSres, tmp);
+	      InverseGram.Mult(LSres, tmp);
 		  double res = sqrt(InnerProduct(LSres,tmp) );
 		  if(myid == 0){
 			cout << "\n|| Bx - F ||_{S^-1} = " << res << endl;
@@ -548,8 +548,11 @@ int main(int argc, char *argv[])
 	   }
 
 	// 10b. error 
-	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
-	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
+	   u0.Distribute( x.GetBlock(u0_var) );
+	   q0.Distribute( x.GetBlock(q0_var) );
+
+//	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
+//	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
 
 	   double u_error = u0.ComputeL2Error(u_coeff);
 	   double q_error = q0.ComputeL2Error(q_coeff);

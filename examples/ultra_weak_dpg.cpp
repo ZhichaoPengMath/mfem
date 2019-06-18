@@ -667,7 +667,7 @@ int main(int argc, char *argv[])
       Vector LSres(F.Size() );
       B.Mult(x, LSres);
       LSres -= F;
-      double res = sqrt(matSinv.InnerProduct(LSres, LSres));
+      double res = sqrt(InverseGram.InnerProduct(LSres, LSres));
       cout << "\n|| Bx - F ||_{S^-1} = " << res << endl;
    }
 //
