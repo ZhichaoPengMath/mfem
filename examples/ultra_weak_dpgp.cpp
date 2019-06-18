@@ -260,18 +260,13 @@ int main(int argc, char *argv[])
    FunctionCoefficient u_coeff( u_exact );/* coefficients */
 
 
-   ParGridFunction u0;
-   u0.MakeRef(u0_space, x.GetBlock(u0_var), 0);
+   ParGridFunction u0(u0_space);
 
-   ParGridFunction q0;
-   q0.MakeRef(q0_space, x.GetBlock(q0_var), 0);
+   ParGridFunction q0(q0_space);
 
    ParGridFunction uhat;
    uhat.MakeRef(uhat_space, x.GetBlock(uhat_var), 0);
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
-
-   ParGridFunction qhat;
-   qhat.MakeRef(qhat_space, x.GetBlock(qhat_var), 0);
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
    ParLinearForm * f_div(new ParLinearForm);
@@ -336,8 +331,8 @@ int main(int argc, char *argv[])
    ParMixedBilinearForm *B_u_normal_jump = new ParMixedBilinearForm(uhat_space, vtest_space);
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
-//   B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_dof_list, uhat, F);
-   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
+   B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_dof_list, uhat, F);
+//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F); /* not working */
    B_u_normal_jump->Finalize();
 
    if(myid == 0){
@@ -370,6 +365,12 @@ int main(int argc, char *argv[])
    HypreParMatrix * matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
    HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
    HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
+
+   delete B_mass_q;
+   delete B_u_dot_div;
+   delete B_u_normal_jump;
+   delete B_q_weak_div;
+   delete B_q_jump;
 
    MPI_Barrier(MPI_COMM_WORLD);
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
@@ -423,6 +424,8 @@ int main(int argc, char *argv[])
    HypreParMatrix *matVinv = Vinv->ParallelAssemble();
    HypreParMatrix *matSinv = Sinv->ParallelAssemble();
 
+   delete Vinv;
+   delete Sinv;
    MPI_Barrier(MPI_COMM_WORLD);
 	
 
@@ -443,8 +446,8 @@ int main(int argc, char *argv[])
 	   B.SetBlock(1, qhat_var ,matB_q_jump);
 	
 	   BlockOperator InverseGram(offsets_test, offsets_test);
-	   InverseGram.SetBlock(0,0,Vinv);
-	   InverseGram.SetBlock(1,1,Sinv);
+	   InverseGram.SetBlock(0,0,matVinv);
+	   InverseGram.SetBlock(1,1,matSinv);
 	
 	   RAPOperator A(B, InverseGram, B);
 	
@@ -485,13 +488,12 @@ int main(int argc, char *argv[])
 	   S0->AddDomainIntegrator(new MassIntegrator() );
 	   S0->Assemble();
 	   S0->Finalize();
-	
 	   HypreParMatrix * AmatS0 = S0->ParallelAssemble();
 	
 		// the exact form of the diagonal block //
 	   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
 	   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
-	   *matV0 += *matV00;
+	   matV0->Add(1.,*matV00); delete matV00;
 	
 	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
 	   HypreParMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
@@ -508,7 +510,7 @@ int main(int argc, char *argv[])
    	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
 
 //	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat );
-//	   Vhatinv->SetPrintLevel(0);
+//	   Shatinv->SetPrintLevel(0);
 
 	   const double prec_rtol = 1e-3;
 	   const int prec_maxit = 200;
@@ -523,16 +525,14 @@ int main(int argc, char *argv[])
 	   P.SetDiagonalBlock(2, Vhatinv);
 	   P.SetDiagonalBlock(3, Shatinv);
 
-	   MPI_Barrier(MPI_COMM_WORLD);
-	
 //	// 10. Solve the normal equation system using the PCG iterative solver.
 //	//     Check the weighted norm of residual for the DPG least square problem.
 //	//     Wrap the primal variable in a GridFunction for visualization purposes.
 	   CGSolver pcg(MPI_COMM_WORLD);
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);
-	   pcg.SetRelTol(1e-6);
-	   pcg.SetMaxIter(80);
+	   pcg.SetRelTol(1e-8);
+	   pcg.SetMaxIter(150);
 	   pcg.SetPrintLevel(solver_print_opt);
 	   pcg.Mult(b,x);
 	
@@ -548,11 +548,8 @@ int main(int argc, char *argv[])
 	   }
 
 	// 10b. error 
-//	   q0.MakeRef( q0_space , x.GetBlock(q0_var) );
-//	   u0.MakeRef( u0_space , x.GetBlock(u0_var) );
-
-	   q0.Distribute( x.GetBlock(q0_var) );
-	   u0.Distribute( x.GetBlock(u0_var) );
+	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
+	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
 
 	   double u_error = u0.ComputeL2Error(u_coeff);
 	   double q_error = q0.ComputeL2Error(q_coeff);
@@ -610,12 +607,6 @@ int main(int argc, char *argv[])
 
 //   // 13. Free the used memory.
 	/* bilinear form */
-//   delete B_mass_q;
-//   delete B_u_dot_div;
-//   delete B_u_normal_jump;
-//   delete B_q_weak_div;
-//   delete B_q_jump;
-//
 //   delete Vinv;
 //   delete Sinv; 
 //
@@ -626,25 +617,25 @@ int main(int argc, char *argv[])
 //   delete Shat;
 //
 //   /* preconditionner */
-//   delete V0inv;
-//   delete S0inv;
-//   delete Vhatinv;
-//   delete Shatinv;
-//   /* finite element collection */
-//   delete u0_fec;
-//   delete q0_fec;
-//   delete uhat_fec;
-//   delete qhat_fec;
-//   delete vtest_fec;
-//   delete stest_fec;
-//
-//   /* finite element spaces */
-//   delete u0_space;
-//   delete q0_space;
-//   delete uhat_space;
-//   delete qhat_space;
-//   delete vtest_space;
-//   delete stest_space;
+   delete V0inv;
+   delete S0inv;
+   delete Vhatinv;
+   delete Shatinv;
+   /* finite element collection */
+   delete u0_fec;
+   delete q0_fec;
+   delete uhat_fec;
+   delete qhat_fec;
+   delete vtest_fec;
+   delete stest_fec;
+
+   /* finite element spaces */
+   delete u0_space;
+   delete q0_space;
+   delete uhat_space;
+   delete qhat_space;
+   delete vtest_space;
+   delete stest_space;
 
    delete mesh;
 
