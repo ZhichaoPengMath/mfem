@@ -38,3 +38,6 @@ ultra_weak_dpg.cpp: (1) How to impose boundary condition?
 05/30/2019
 grad_dpg.cpp: (1) solve \grad u = f
 			  (2) test the self made DGNormalTraceJump opperator
+
+06/18/2019
+ultra_weak_dpgp.cpp: Never Forget to initialize vector and grid functions
