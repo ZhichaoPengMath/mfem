@@ -288,7 +288,11 @@ int main(int argc, char *argv[])
    //        [ S0^{-1}     0     ]
    //        [   0     Shat^{-1} ]      Shat = (Bhat^T Sinv Bhat)
    //
-   //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
+   //     corresponding to the primal (x0) and interfacial (xhat) unknowns.
+   //     Since the Shat operator is equivalent to an H(div) matrix reduced to
+   //     the interfacial skeleton, we approximate its inverse with one V-cycle
+   //     of the ADS preconditioner from the hypre library (in 2D we use AMS for
+   //     the rotated H(curl) problem).
    HypreBoomerAMG *S0inv = new HypreBoomerAMG(*matS0);
    S0inv->SetPrintLevel(0);
 
