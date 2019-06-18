@@ -53,6 +53,7 @@ void  zero_fun(const Vector & x, Vector & f);
 void  q_exact(const Vector & x, Vector & f);
 
 double alpha_pzc = 100.;
+int atan_opt = 0;
 
 int main(int argc, char *argv[])
 {
@@ -67,6 +68,8 @@ int main(int argc, char *argv[])
    int solver_print_opt = 0;
    int h1_trace_opt = 0;/* use lower order h1_trace term */
    int rt_trace_opt = 0;/* use lower order rt_trace term */
+
+   atan_opt = 0;/* which exact solution to use */
 
    double c_divdiv = 1.;
    double c_gradgrad = 1.;
@@ -102,6 +105,9 @@ int main(int argc, char *argv[])
 				  " use lower order h1 trace or not, 0 by default");
    args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
 				  " use lower order rt trace or not, 0 by default");
+
+   args.AddOption(&atan_opt, "-atan", "--atan",
+				  " which exact solution to use, 0 by default, sin + polynomial by default");
 
 
    args.Parse();
@@ -650,7 +656,7 @@ int main(int argc, char *argv[])
 //   //     Check the weighted norm of residual for the DPG least square problem.
 //   //     Wrap the primal variable in a GridFunction for visualization purposes.
 
-//     CG(A,b,x,solver_print_opt,4000, 1e-16,0.);
+//     CG(A,b,x,solver_print_opt,4000, 1e-9,0.);
 //   GMRES(A, P, b, x, solver_print_opt, 1000, 1000, 0., 1e-12);
    PCG(A, P, b, x, solver_print_opt, 1000, 1e-18, 0.0);
 //   PCG(A, P, b, x, solver_print_opt, 1000, 1e-16, 0.0);
@@ -669,6 +675,7 @@ int main(int argc, char *argv[])
    cout<< "\n dimension: "<<dim<<endl;
    cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
    printf("\n|| u_h - u ||_{L^2} = %e \n",u0.ComputeL2Error(u_coeff) );
+//   q0.ProjectCoefficient(q_coeff);
    printf("\n|| q_h - u ||_{L^2} = %e \n",q0.ComputeL2Error(q_coeff) );
    cout<<endl;
 
@@ -690,7 +697,7 @@ int main(int argc, char *argv[])
       sol_ofs.precision(8);
       u0.Save(sol_ofs);
 
-	  if(q_visual==1){
+	  if(q_visual){
          ofstream q_variable_ofs("sol_q.gf");
          q_variable_ofs.precision(8);
          q0.Save(q_variable_ofs);
@@ -706,7 +713,7 @@ int main(int argc, char *argv[])
       sol_sock.precision(8);
       sol_sock << "solution\n" << *mesh << u0 << flush;
 
-	  if(q_visual==1){
+	  if(q_visual){
          socketstream q_sock(vishost, visport);
          q_sock.precision(8);
          q_sock << "solution\n" << *mesh << q0 << "window_title 'Solution q'" <<
@@ -775,11 +782,35 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
-//		return -12.*x(0)-12.*x(1) + 12.;
-//		return -4.;
-//		return 0.;
-		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
+		if(atan_opt == 0){
+			return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		}
+		else if(atan_opt == 1){
+			double yy = x(1) - 0.5;
+			return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+					(1+alpha_pzc*alpha_pzc*yy*yy )/
+					(1+alpha_pzc*alpha_pzc*yy*yy );
+		}
+		else if(atan_opt == 2){
+			double yy = x(1) - 0.5;
+			double xx = x(0) - 0.5;
+			return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+					(1+alpha_pzc*alpha_pzc*yy*yy )/
+					(1+alpha_pzc*alpha_pzc*yy*yy )
+			        +2*alpha_pzc*alpha_pzc*alpha_pzc*xx/
+					(1+alpha_pzc*alpha_pzc*xx*xx )/
+					(1+alpha_pzc*alpha_pzc*xx*xx );
+		}
+		else{
+			double yy = x(1) - 0.5;
+			double yy2 = x(1) - 0.77;
+			return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+					(1+alpha_pzc*alpha_pzc*yy*yy )/
+					(1+alpha_pzc*alpha_pzc*yy*yy )
+			        +2*alpha_pzc*alpha_pzc*alpha_pzc*yy2/
+					(1+alpha_pzc*alpha_pzc*yy2*yy2 )/
+					(1+alpha_pzc*alpha_pzc*yy2*yy2 );
+		}
 	}
 	else if(x.Size() == 3){
 		return 12.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
@@ -799,19 +830,26 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-//		return  2.*x(0)*x(0)*x(0) - 3.*x(0)*x(0)
-//			   +2.*x(1)*x(1)*x(1) - 3.*x(1)*x(1);
-//		return  x(0)*x(0) + x(1) * x(1);
-//		return  1.;
-//		return  x(0) + x(1);
-		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
-		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
+		if(atan_opt == 0){
+			return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+		}
+		else if(atan_opt == 1){
+			return atan(alpha_pzc * (x(1) - 0.5)  );
+		}
+		else if(atan_opt == 2){
+			return atan(alpha_pzc * (x(1) - 0.5)  )
+				  +atan(alpha_pzc * (x(0) - 0.5)  );
+		}
+		else{
+			return atan(alpha_pzc * (x(1) - 0.5)  )
+				  +atan(alpha_pzc * (x(1) - 0.77)  );
+		}
 	}
 	else if(x.Size() ==3 ){
 		return x(0) + sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) ); 
 	}
 	else if(x.Size() == 1){
-//		return atan(alpha_pzc * x(0) );
+		return atan(alpha_pzc * (x(0)-0.5)  );
 		return sin(2. * M_PI* x(0) ) ;
 	}
 	else{
@@ -823,21 +861,23 @@ double u_exact(const Vector & x){
 /* exact q = -grad u */
 void q_exact(const Vector & x,Vector & f){
 	if(x.Size() == 2){
-//		f(0) = -M_PI*cos(M_PI*x(0) ) * sin(M_PI*x(1) );
-//		f(1) = -M_PI*sin(M_PI*x(0) ) * cos(M_PI*x(1) );
-
-//		f(0) = -1.;
-//		f(1) = -1.;
-
-//		f(0) = -2.*x(0);
-//		f(1) = -2.*x(1);
-
-//		f(0) = 6.*x(0)*(x(0)-1);
-//		f(1) = 6.*x(1)*(x(1)-1);
-
-//	    f = 0.;
-		f(0) = -1. - 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
-		f(1) =     - 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
+		if(atan_opt == 0){
+			f(0) = -1. - 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+			f(1) =     - 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
+		}
+		else if(atan_opt == 1){
+			f(0) = 0.;
+			f(1) = -alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5) * (x(1) - 0.5)  );
+		}
+		else if(atan_opt == 2){
+			f(0) = -alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(0) - 0.5) * (x(0) - 0.5)  );
+			f(1) = -alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5) * (x(1) - 0.5)  );
+		}
+		else{
+			f(0) = 0.; 
+			f(1) = -alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5)  * (x(1) - 0.5)  )
+			       -alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.75) * (x(1) - 0.77)  );
+		}
 	}
 	else if(x.Size() == 3){
 		f(0) = -1. - 2.*M_PI* cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );

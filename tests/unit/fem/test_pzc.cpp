@@ -199,18 +199,18 @@ TEST_CASE("Test for the DPG domain integrators",
 				<<"tmp2_l2: "<<tmp2_l2.Size()<<endl
 				<<endl;
 
-			ofstream my_file("./divdiv.dat"); /*debug */
-			blf.SpMat().PrintMatlab(my_file);/* debug */
-
-
-			ofstream my_file2("./vdiv.dat"); /*debug */
-			blf_mfem.SpMat().PrintMatlab(my_file2);/* debug */
-
-			ofstream my_file3("./mass.dat"); /*debug */
-			blf_mass.SpMat().PrintMatlab(my_file3);/* debug */
-
-			ofstream my_file4("./diff.dat"); /*debug */
-			blf_diff.SpMat().PrintMatlab(my_file4);/* debug */
+//			ofstream my_file("./divdiv.dat"); /*debug */
+//			blf.SpMat().PrintMatlab(my_file);/* debug */
+//
+//
+//			ofstream my_file2("./vdiv.dat"); /*debug */
+//			blf_mfem.SpMat().PrintMatlab(my_file2);/* debug */
+//
+//			ofstream my_file3("./mass.dat"); /*debug */
+//			blf_mass.SpMat().PrintMatlab(my_file3);/* debug */
+//
+//			ofstream my_file4("./diff.dat"); /*debug */
+//			blf_diff.SpMat().PrintMatlab(my_file4);/* debug */
 
 
 			blf.Mult(f_l2, tmp1_l2);

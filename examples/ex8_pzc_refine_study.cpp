@@ -43,6 +43,7 @@ double u_exact(const Vector & x);
 void q_exact(const Vector & x,Vector & f);
 
 double alpha_pzc = 100.;
+int atan_opt = 0;
 
 int main(int argc, char *argv[])
 {
@@ -56,6 +57,8 @@ int main(int argc, char *argv[])
    int  trace_opt = 0;
    int total_refine_level = 1;
    bool q_visual = 0;
+
+   atan_opt = 0;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -79,6 +82,8 @@ int main(int argc, char *argv[])
                   "--no-visualization-for-grad-term",
                   "Enable or disable GLVis visualization for grad term.");
 
+   args.AddOption(&atan_opt, "-atan", "--atan",
+				  " which exact solution to use, 0 by default, sin + polynomial by default");
 
    args.Parse();
    if (!args.Good())
@@ -440,12 +445,36 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		if(atan_opt == 0){
+			return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		}
+		else{
+			double yy = x(1) - 0.5;
+			if(atan_opt == 1){
+				return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+						(1+alpha_pzc*alpha_pzc*yy*yy )/
+						(1+alpha_pzc*alpha_pzc*yy*yy );
+			}
+			else if(atan_opt == 2){
+				double xx = x(0) - 0.5;
+				return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+						(1+alpha_pzc*alpha_pzc*yy*yy )/
+						(1+alpha_pzc*alpha_pzc*yy*yy )
+				        +2*alpha_pzc*alpha_pzc*alpha_pzc*xx/
+						(1+alpha_pzc*alpha_pzc*xx*xx )/
+						(1+alpha_pzc*alpha_pzc*xx*xx );
+			}
+			else{
+				double yy2 = x(1) - 0.77;
+				return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+						(1+alpha_pzc*alpha_pzc*yy*yy )/
+						(1+alpha_pzc*alpha_pzc*yy*yy )
+				        +2*alpha_pzc*alpha_pzc*alpha_pzc*yy2/
+						(1+alpha_pzc*alpha_pzc*yy2*yy2 )/
+						(1+alpha_pzc*alpha_pzc*yy2*yy2 );
+			}
+		}
 
-//		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
-//		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
-//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
-//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
 	}
 	else if(x.Size() == 1){
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
@@ -463,9 +492,20 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-//		return atan(alpha_pzc * x(1) );
-
-		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+		if(atan_opt == 0){
+			return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+		}
+		else if(atan_opt == 1){
+			return atan(alpha_pzc * (x(1) - 0.5) );
+		}
+		else if(atan_opt == 2){
+			return atan(alpha_pzc * (x(1) - 0.5)  )
+				  +atan(alpha_pzc * (x(0) - 0.5)  );
+		}
+		else{
+			return atan(alpha_pzc * (x(1) - 0.5)  )
+				  +atan(alpha_pzc * (x(1) - 0.77)  );
+		}
 //		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
@@ -481,15 +521,23 @@ double u_exact(const Vector & x){
 /* grad exact solution */
 void q_exact( const Vector & x, Vector & f){
 	if(x.Size() == 2){
-		f(0) = +1. + 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
-		f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
-
-//		f(0) = M_PI*cos(M_PI*x(0) ) * sin( M_PI* x(1) );
-//		f(1) = M_PI*sin(M_PI*x(0) ) * cos( M_PI* x(1) );
-
-//		f(0) = 0.;
-//		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * x(1) * x(1) );
-		
+		if(atan_opt == 0){
+			f(0) = +1. + 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+			f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
+		}
+		else if(atan_opt == 1){
+			f(0) = 0.;
+			f(1) = +alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5) * (x(1) - 0.5)  );
+		}
+		else if(atan_opt == 2 ){
+			f(0) = +alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(0) - 0.5) * (x(0) - 0.5)  );
+			f(1) = +alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5) * (x(1) - 0.5)  );
+		}
+		else{
+			f(0) = 0.; 
+			f(1) = +alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.5)  * (x(1) - 0.5)  )
+			       +alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1) - 0.75) * (x(1) - 0.77)  );
+		}
 	}
 	else if(x.Size() == 1){
 		f(0) = 2.*M_PI*cos(2. * M_PI * x(0) );
