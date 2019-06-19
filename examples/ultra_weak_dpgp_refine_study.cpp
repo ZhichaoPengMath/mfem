@@ -516,8 +516,8 @@ int main(int argc, char *argv[])
 	//	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
 	//	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
 	
-		   u_l2_error(ref_i) = u0.ComputeL2Error(u_coeff);
-		   q_l2_error(ref_i) = q0.ComputeL2Error(q_coeff);
+		   u_l2_error(ref_i) = abs(u0.ComputeL2Error(u_coeff)  );
+		   q_l2_error(ref_i) = abs(q0.ComputeL2Error(q_coeff)  );
 	
 		   int global_ne = mesh->GetGlobalNE();
 		
@@ -596,6 +596,7 @@ int main(int argc, char *argv[])
 	   delete stest_space;
 
 	   mesh->UniformRefinement();
+       mesh->ReorientTetMesh();
 	   if(myid == 0){
 			cout<<endl<<" refinement "<<ref_i<<" complete"<<endl;
 	   }

@@ -265,7 +265,7 @@ int main(int argc, char *argv[])
    ParGridFunction q0(q0_space);
 
    ParGridFunction uhat;
-   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
+   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0); /* Question should I use TRef or Ref here ? */
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
@@ -287,10 +287,10 @@ int main(int argc, char *argv[])
    uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list2);
 
 //   if(myid == 0){
-	  cout<<endl<<endl<<"Boundary information: "<<endl;
- 	  cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
- 	  cout<<" number of essential  v_dofs "<<ess_trace_dof_list.Size()<<endl;
- 	  cout<<" number of essential  true_dofs "<<ess_trace_dof_list2.Size()<<endl;
+//	  cout<<endl<<endl<<"Boundary information: "<<endl;
+// 	  cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
+// 	  cout<<" number of essential  v_dofs "<<ess_trace_dof_list.Size()<<endl;
+// 	  cout<<" number of essential  true_dofs "<<ess_trace_dof_list2.Size()<<endl;
 //  }
 
 
@@ -370,11 +370,11 @@ int main(int argc, char *argv[])
    HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
    HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
 
-   delete B_mass_q;
-   delete B_u_dot_div;
-   delete B_u_normal_jump;
-   delete B_q_weak_div;
-   delete B_q_jump;
+//   delete B_mass_q;
+//   delete B_u_dot_div;
+//   delete B_u_normal_jump;
+//   delete B_q_weak_div;
+//   delete B_q_jump;
 
    MPI_Barrier(MPI_COMM_WORLD);
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
@@ -428,9 +428,6 @@ int main(int argc, char *argv[])
    HypreParMatrix *matVinv = Vinv->ParallelAssemble();
    HypreParMatrix *matSinv = Sinv->ParallelAssemble();
 
-   delete Vinv;
-   delete Sinv;
-	
 
 	/************************************************/
 
@@ -496,12 +493,25 @@ int main(int argc, char *argv[])
 	   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
 	
 		// the exact form of the diagonal block //
-	   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
+//	   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
 	   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
-	   matV0->Add(1.,*matV00); delete matV00;
+	   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
+//	   matV0->Add(1.,*matV00); delete matV00;
 	
 	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
-	   HypreParMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+
+	   /********************************************************/
+//	   ParMixedBilinearForm *Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+//	   Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+//	   Sjump->Assemble();
+//	   Sjump->Finalize();
+//	   HypreParMatrix * matSjump=Sjump->ParallelAssemble(); delete Sjump;
+//	   HypreParMatrix * Shat   = RAP(matSjump, matVinv, matSjump);
+	   /********************************************************/
+	   /* this one not work with AMG, the difference is whether the  essential dof is removed */
+	   HypreParMatrix * Shat2   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+
+
 
 
 	   HypreBoomerAMG *V0inv = new HypreBoomerAMG( *matV0 );
@@ -516,12 +526,11 @@ int main(int argc, char *argv[])
 
 //	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat );
 //	   Shatinv->SetPrintLevel(0);
-	   
-//	   HypreEuclid * Shatinv = new HypreEuclid(* Shat);
 
-	   const double prec_rtol = 5e-3;
+
+	   const double prec_rtol = 1e-3;
 	   const int prec_maxit = 200;
-	   HyprePCG * Shatinv = new HyprePCG( *Shat );
+	   HyprePCG * Shatinv = new HyprePCG( *Shat2 );
 	   Shatinv->SetTol(prec_rtol);
 	   Shatinv->SetMaxIter(prec_maxit);
 
@@ -537,6 +546,9 @@ int main(int argc, char *argv[])
 //	// 10. Solve the normal equation system using the PCG iterative solver.
 //	//     Check the weighted norm of residual for the DPG least square problem.
 //	//     Wrap the primal variable in a GridFunction for visualization purposes.
+
+	   StopWatch timer;
+	   timer.Start();
 	   CGSolver pcg(MPI_COMM_WORLD);
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);
@@ -544,7 +556,12 @@ int main(int argc, char *argv[])
 	   pcg.SetMaxIter(150);
 	   pcg.SetPrintLevel(solver_print_opt);
 	   pcg.Mult(b,x);
-	
+	   MPI_Barrier(MPI_COMM_WORLD);
+	   timer.Stop();
+	   if(myid==0){
+			cout<<"rank "<<myid<<" : "<<timer.RealTime()<<endl;
+	   }
+
 	   {
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);
