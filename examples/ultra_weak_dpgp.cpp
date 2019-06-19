@@ -269,10 +269,12 @@ int main(int argc, char *argv[])
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
-   ParLinearForm * f_div(new ParLinearForm);
-   f_div->Update(stest_space, F.GetBlock(1) ,0);
+   ParLinearForm * f_div(new ParLinearForm(stest_space) );
+//   f_div->Update(stest_space, F.GetBlock(1) ,0);
    f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
    f_div->Assemble();
+   f_div->ParallelAssemble( F.GetBlock(1) );
+
 
    // 6. Deal with boundary conditions
    //    Dirichlet boundary condition is imposed throught trace term  \hat{u}
@@ -280,14 +282,16 @@ int main(int argc, char *argv[])
    ess_bdr = 1;
 
    Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
+   Array<int> ess_trace_dof_list2;
    uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_dof_list);
-//   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list);
+   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list2);
 
-   if(myid == 0){
+//   if(myid == 0){
 	  cout<<endl<<endl<<"Boundary information: "<<endl;
  	  cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
- 	  cout<<" number of essential true dofs "<<ess_trace_dof_list.Size()<<endl;
-   }
+ 	  cout<<" number of essential  v_dofs "<<ess_trace_dof_list.Size()<<endl;
+ 	  cout<<" number of essential  true_dofs "<<ess_trace_dof_list2.Size()<<endl;
+//  }
 
 
    // 7. Set up the mixed bilinear forms 
@@ -426,7 +430,6 @@ int main(int argc, char *argv[])
 
    delete Vinv;
    delete Sinv;
-   MPI_Barrier(MPI_COMM_WORLD);
 	
 
 	/************************************************/
@@ -450,6 +453,7 @@ int main(int argc, char *argv[])
 	   InverseGram.SetBlock(1,1,matSinv);
 	
 	   RAPOperator A(B, InverseGram, B);
+
 	
 	/**************************************************/
 	
@@ -459,6 +463,7 @@ int main(int argc, char *argv[])
 			InverseGram.Mult(F,IGF);
 			B.MultTranspose(IGF,b);
 	   }
+	    
 	   // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
 	   //   We use the "Jacobian" preconditionner
 	   //
@@ -488,7 +493,7 @@ int main(int argc, char *argv[])
 	   S0->AddDomainIntegrator(new MassIntegrator() );
 	   S0->Assemble();
 	   S0->Finalize();
-	   HypreParMatrix * AmatS0 = S0->ParallelAssemble();
+	   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
 	
 		// the exact form of the diagonal block //
 	   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
@@ -511,12 +516,16 @@ int main(int argc, char *argv[])
 
 //	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat );
 //	   Shatinv->SetPrintLevel(0);
+	   
+//	   HypreEuclid * Shatinv = new HypreEuclid(* Shat);
 
-	   const double prec_rtol = 1e-3;
+	   const double prec_rtol = 5e-3;
 	   const int prec_maxit = 200;
 	   HyprePCG * Shatinv = new HyprePCG( *Shat );
 	   Shatinv->SetTol(prec_rtol);
 	   Shatinv->SetMaxIter(prec_maxit);
+
+//	   Shatinv->SetPrintLevel(1);
 	
 
 	   BlockDiagonalPreconditioner P(offsets);
@@ -531,7 +540,7 @@ int main(int argc, char *argv[])
 	   CGSolver pcg(MPI_COMM_WORLD);
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);
-	   pcg.SetRelTol(1e-8);
+	   pcg.SetRelTol(1e-9);
 	   pcg.SetMaxIter(150);
 	   pcg.SetPrintLevel(solver_print_opt);
 	   pcg.Mult(b,x);

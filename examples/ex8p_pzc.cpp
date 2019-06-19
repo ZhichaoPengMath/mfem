@@ -215,6 +215,7 @@ int main(int argc, char *argv[])
    ess_bdr = 1;
    Array<int> ess_dof;
    x0_space->GetEssentialVDofs(ess_bdr, ess_dof);
+   cout<<endl<<"Essential vdof "<<ess_dof.Size()<<endl<<endl;
 
    ParGridFunction * x0 = new ParGridFunction(x0_space);
    x0->MakeTRef(x0_space, x.GetBlock(x0_var) );

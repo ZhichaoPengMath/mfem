@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 	 cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
 	 double error_l2 = x.ComputeL2Error(U);
 	 if(myid == 0){
-		cout << "\n|| u_h - u ||_{L^2} = " << error_l2 << '\n' << endl;
+		printf("\n|| u_h - u ||_{L^2} = %e \n",error_l2);
 	 }
 
    // 13. Switch back to the host.
@@ -318,9 +318,9 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
-				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
+//		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(1)/
+//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) )/
+//				(1+alpha_pzc*alpha_pzc*x(1)*x(1) );
 //		return -M_PI * M_PI *sin( M_PI*x(1) ); /* first index is 0 */
 		return M_PI * M_PI * ( sin(M_PI*x(0) ) + sin( M_PI*x(1) ) ); /* first index is 0 */
 	}
@@ -340,7 +340,7 @@ double f_exact(const Vector & x){
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
 //		return sin( M_PI * x(1) ); /* first index is 0 */
-		return atan(alpha_pzc * x(1) );
+//		return atan(alpha_pzc * x(1) );
 		return sin(M_PI* x(0) ) + sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){
