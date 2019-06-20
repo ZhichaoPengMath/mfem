@@ -288,7 +288,8 @@ int main(int argc, char *argv[])
       double res = sqrt(InnerProduct(LSres, tmp));
       if (myid == 0)
       {
-         cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
+//         cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
+		 printf("\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = %e\n" , res);
       }
    }
 

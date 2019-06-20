@@ -67,6 +67,9 @@ int main(int argc, char *argv[])
    double c_divdiv = 1.;
    double c_gradgrad = 1.;
 
+   double user_pcg_prec_rtol = -1.;
+   int user_pcg_prec_maxit = -1;
+
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
@@ -102,6 +105,11 @@ int main(int argc, char *argv[])
    args.AddOption(&atan_opt, "-atan", "--atan",
 				  " which exact solution to use, 0 by default, sin + polynomial by default");
 
+   args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
+				  " relative tolerance for the cg solver in preconditioner");
+
+   args.AddOption(&user_pcg_prec_maxit, "-prec_iter", "--prec_iter",
+				  " max iter for the cg solver in preconditioner");
 
    args.Parse();
    if (!args.Good())
@@ -145,6 +153,10 @@ int main(int argc, char *argv[])
 		mesh->UniformRefinement();
    }
    mesh->ReorientTetMesh();
+   int mesh_global_ne = mesh->GetGlobalNE();
+   if(myid == 0){
+		cout << "\nelement number of the mesh: "<< mesh_global_ne<<endl; 
+   }
 
    // 4. Define the trial, interfacial (trace) and test DPG spaces:
    //		q = grad u
@@ -232,7 +244,7 @@ int main(int argc, char *argv[])
    HYPRE_Int global_size_stest = stest_space->GlobalTrueVSize();
 
    if(myid == 0){
-	   std::cout << "\nNumber of Unknowns rank "<<myid<<" :\n"<< endl
+	   std::cout << "\nTotal Number of Unknowns:\n"<< endl
 			     << " U0          " <<  global_size_u0   << endl
 			     << " Q0          " <<  global_size_q0   << endl
 				 << " Uhat        " <<  global_size_uhat << endl
@@ -370,11 +382,11 @@ int main(int argc, char *argv[])
    HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
    HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
 
-//   delete B_mass_q;
-//   delete B_u_dot_div;
-//   delete B_u_normal_jump;
-//   delete B_q_weak_div;
-//   delete B_q_jump;
+   delete B_mass_q;
+   delete B_u_dot_div;
+   delete B_u_normal_jump;
+   delete B_q_weak_div;
+   delete B_q_jump;
 
    MPI_Barrier(MPI_COMM_WORLD);
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
@@ -493,10 +505,8 @@ int main(int argc, char *argv[])
 	   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
 	
 		// the exact form of the diagonal block //
-//	   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
 	   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
 	   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
-//	   matV0->Add(1.,*matV00); delete matV00;
 	
 	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
 
@@ -524,12 +534,19 @@ int main(int argc, char *argv[])
    	   if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
    	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
 
-//	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat );
+//	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat2 );
 //	   Shatinv->SetPrintLevel(0);
 
 
-	   const double prec_rtol = 1e-3;
-	   const int prec_maxit = 200;
+	   double prec_rtol = 1e-3;
+	   int prec_maxit = 200;
+	   if(user_pcg_prec_rtol>0){
+			prec_rtol = user_pcg_prec_rtol;
+	   }
+	   if(user_pcg_prec_maxit>0){
+			prec_maxit = user_pcg_prec_maxit;
+	   }
+
 	   HyprePCG * Shatinv = new HyprePCG( *Shat2 );
 	   Shatinv->SetTol(prec_rtol);
 	   Shatinv->SetMaxIter(prec_maxit);
@@ -559,7 +576,7 @@ int main(int argc, char *argv[])
 	   MPI_Barrier(MPI_COMM_WORLD);
 	   timer.Stop();
 	   if(myid==0){
-			cout<<"rank "<<myid<<" : "<<timer.RealTime()<<endl;
+			cout<<"time: "<<timer.RealTime()<<endl;
 	   }
 
 	   {
@@ -636,15 +653,21 @@ int main(int argc, char *argv[])
 
 //   // 13. Free the used memory.
 	/* bilinear form */
-//   delete Vinv;
-//   delete Sinv; 
-//
-//   delete matV00;
-//   delete matV0;
-////   delete matS0;
-//   delete Vhat;
-//   delete Shat;
-//
+   delete Vinv;
+   delete Sinv; 
+   /* matrix */
+   delete matB_mass_q;
+   delete matB_u_dot_div;
+   delete matB_u_normal_jump;
+   delete matB_q_weak_div;
+   delete matB_q_jump;
+   delete matVinv;
+   delete matSinv;
+
+   delete AmatS0;
+   delete matV0;
+   delete Vhat;
+   delete Shat2;
 //   /* preconditionner */
    delete V0inv;
    delete S0inv;
