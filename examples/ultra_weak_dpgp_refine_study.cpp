@@ -70,6 +70,12 @@ int main(int argc, char *argv[])
    double c_divdiv = 1.;
    double c_gradgrad = 1.;
 
+   double user_pcg_prec_rtol = -1.;
+   int user_pcg_prec_maxit = -1;
+
+   int prec_amg = 1;
+   double amg_perturbation = 1e-2;
+
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
@@ -105,8 +111,18 @@ int main(int argc, char *argv[])
    args.AddOption(&atan_opt, "-atan", "--atan",
 				  " which exact solution to use, 0 by default, sin + polynomial by default");
 
+
+   args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
+				  " relative tolerance for the cg solver in preconditioner");
+
+   args.AddOption(&user_pcg_prec_maxit, "-prec_iter", "--prec_iter",
+				  " max iter for the cg solver in preconditioner");
    args.AddOption(&total_refine_level, "-tr", "--tr",
 				  " total_refine_level, 1 by default");
+   args.AddOption(&prec_amg, "-prec_amg", "--prec_amg",
+				  " use a perturbed amg preconditionner for the last diagonal block or not, 1 by default");
+   args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
+				  " the perturbation for the last diagonal block in the preconditioner");
 
    args.Parse();
    if (!args.Good())
@@ -349,7 +365,9 @@ int main(int argc, char *argv[])
 	
 	   delete B_mass_q;
 	   delete B_u_dot_div;
-	   delete B_u_normal_jump;
+	   if(prec_amg != 1){	
+   	       delete B_u_normal_jump;
+   	   }
 	   delete B_q_weak_div;
 	   delete B_q_jump;
 	
@@ -446,49 +464,83 @@ int main(int argc, char *argv[])
 		   // We want to approximate them.
 		/***************************************************************/
 		   ParBilinearForm *S0 = new ParBilinearForm(u0_space);
-		   S0->AddDomainIntegrator(new MassIntegrator() );
-		   S0->Assemble();
-		   S0->Finalize();
-		   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
-		
-			// the exact form of the diagonal block //
-		   HypreParMatrix * matV00 = RAP(matB_q_weak_div, matSinv, matB_q_weak_div);
-		   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
-		   matV0->Add(1.,*matV00); delete matV00;
-		
-		   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
-		   HypreParMatrix * Shat   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+	   	   S0->AddDomainIntegrator(new MassIntegrator() );
+	   	   S0->Assemble();
+	   	   S0->Finalize();
+	   	   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
 	
+	   	    // the exact form of the diagonal block //
+	   	   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+	   	   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
 	
-		   HypreBoomerAMG *V0inv = new HypreBoomerAMG( *matV0 );
-		   V0inv->SetPrintLevel(0);
-		
-		   HypreBoomerAMG *S0inv = new HypreBoomerAMG( *AmatS0 );
-		   S0inv->SetPrintLevel(0);
+	   	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
+
+	   	   /********************************************************/
+	   	   /* perturbed amg preconditioner for the last block */
+	   	   ParMixedBilinearForm *Sjump = NULL;
+	   	   HypreParMatrix * matSjump = NULL;
+	   	   HypreParMatrix * Shat = NULL;
+	   	   if(prec_amg == 1){
+	   	        amg_perturbation = min(1e-2, amg_perturbation);
+	   	    	Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+	   	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+	   	   		Sjump->Assemble();
+	   	   		Sjump->Finalize();
+	   	   		Sjump->SpMat() *= amg_perturbation;
+	   	   		Sjump->SpMat() += B_u_normal_jump->SpMat();
+	   	   		matSjump=Sjump->ParallelAssemble(); 
+	   	    	delete Sjump;
+	   	    	delete B_u_normal_jump;
+	   	        Shat = RAP(matSjump, matVinv, matSjump);
+	   	   }
+	   	   /********************************************************/
+	   	   HypreParMatrix * Shat2  = NULL;
+	   	   if(prec_amg != 1){
+	   	    	Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+	   	   }
+	   	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
+   	   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
+	   	   HypreBoomerAMG *Shatinv = NULL;
+	   	   
+	   	   V0inv = new HypreBoomerAMG( *matV0 );
+	   	   V0inv->SetPrintLevel(0);
+	   	   S0inv = new HypreBoomerAMG( *AmatS0 );
+	   	   S0inv->SetPrintLevel(0);
+   	   	   if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
+   	   	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
+	   	   
+	   	   double prec_rtol = 1e-3;
+	   	   int prec_maxit = 200;
+	   	   BlockDiagonalPreconditioner P(offsets);
+	   	   P.SetDiagonalBlock(0, V0inv);
+	   	   P.SetDiagonalBlock(1, S0inv);
+	   	   P.SetDiagonalBlock(2, Vhatinv);
+
+	   	   HyprePCG *Shatinv2=NULL;
+	   	   if (prec_amg == 1)
+	   	   {
+	   	   	  Shatinv = new HypreBoomerAMG( *Shat );
+	   	      Shatinv->SetPrintLevel(0);
+	   	      P.SetDiagonalBlock(3, Shatinv);
+	   	   }
+	   	   else
+	   	   {
+	   	      if(user_pcg_prec_rtol>0){
+	   	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
+	   	   	  }
+	   	   	  if(user_pcg_prec_maxit>0){
+	   	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
+	   	   	  }
+	   	      Shatinv2 = new HyprePCG( *Shat2 );
+	   	      Shatinv2->SetPrintLevel(0);
+	   	      Shatinv2->SetTol(prec_rtol);
+	   	      Shatinv2->SetMaxIter(prec_maxit);
+	   	      P.SetDiagonalBlock(3, Shatinv2);
+	   	   }
+
+//	   Shatinv->SetPrintLevel(1);
 	
-	   	   HypreSolver *Vhatinv;
-	   	   if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
-	   	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
-	
-	//	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat );
-	//	   Shatinv->SetPrintLevel(0);
-		   
-	//	   HypreEuclid * Shatinv = new HypreEuclid(* Shat);
-	
-		   const double prec_rtol = 5e-3;
-		   const int prec_maxit = 200;
-		   HyprePCG * Shatinv = new HyprePCG( *Shat );
-		   Shatinv->SetTol(prec_rtol);
-		   Shatinv->SetMaxIter(prec_maxit);
-	
-	//	   Shatinv->SetPrintLevel(1);
-		
-	
-		   BlockDiagonalPreconditioner P(offsets);
-		   P.SetDiagonalBlock(0, V0inv);
-		   P.SetDiagonalBlock(1, S0inv);
-		   P.SetDiagonalBlock(2, Vhatinv);
-		   P.SetDiagonalBlock(3, Shatinv);
+
 	
 	//	// 10. Solve the normal equation system using the PCG iterative solver.
 	//	//     Check the weighted norm of residual for the DPG least square problem.

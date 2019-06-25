@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
    int user_pcg_prec_maxit = -1;
 
    int prec_amg = 1;
+   double amg_perturbation = 1e-2;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -114,7 +115,10 @@ int main(int argc, char *argv[])
 				  " max iter for the cg solver in preconditioner");
 
    args.AddOption(&prec_amg, "-prec_amg", "--prec_amg",
-				  " use amg preconditionner for all the block or not, 1 by default");
+				  " use a perturbed amg preconditionner for the last diagonal block or not, 1 by default");
+   args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
+				  " the perturbation for the last diagonal block in the preconditioner");
+
 
    args.Parse();
    if (!args.Good())
@@ -389,9 +393,11 @@ int main(int argc, char *argv[])
 
    delete B_mass_q;
    delete B_u_dot_div;
-//   delete B_u_normal_jump;
    delete B_q_weak_div;
    delete B_q_jump;
+   if(prec_amg != 1){	
+	   delete B_u_normal_jump;
+   }
 
    MPI_Barrier(MPI_COMM_WORLD);
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
@@ -516,19 +522,28 @@ int main(int argc, char *argv[])
 	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
 
 	   /********************************************************/
+	   /* perturbed amg preconditioner for the last block */
 	   ParMixedBilinearForm *Sjump = NULL;
+	   HypreParMatrix * matSjump = NULL;
+	   HypreParMatrix * Shat = NULL;
+	   if(prec_amg == 1){
+		    amg_perturbation = min(1e-2, amg_perturbation);
 			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
 	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
 	   		Sjump->Assemble();
 	   		Sjump->Finalize();
-	   		Sjump->SpMat() *= 1e-2;
+	   		Sjump->SpMat() *= amg_perturbation;
 	   		Sjump->SpMat() += B_u_normal_jump->SpMat();
-	   		HypreParMatrix * matSjump=Sjump->ParallelAssemble(); delete Sjump;
-	   delete B_u_normal_jump;
-	   HypreParMatrix * Shat   = RAP(matSjump, matVinv, matSjump);
+	   		matSjump=Sjump->ParallelAssemble(); 
+			delete Sjump;
+			delete B_u_normal_jump;
+	        Shat = RAP(matSjump, matVinv, matSjump);
+	   }
 	   /********************************************************/
-	   /* this one not work with AMG, the difference is whether the  essential dof is removed */
-	   HypreParMatrix * Shat2   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+	   HypreParMatrix * Shat2  = NULL;
+	   if(prec_amg != 1){
+			Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+	   }
 	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
    	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
 	   HypreBoomerAMG *Shatinv = NULL;
@@ -542,12 +557,6 @@ int main(int argc, char *argv[])
 	   
 	   double prec_rtol = 1e-3;
 	   int prec_maxit = 200;
-	   if(user_pcg_prec_rtol>0){
-	    	prec_rtol = user_pcg_prec_rtol;
-	   }
-	   if(user_pcg_prec_maxit>0){
-	    	prec_maxit = user_pcg_prec_maxit;
-	   }
 	   BlockDiagonalPreconditioner P(offsets);
 	   P.SetDiagonalBlock(0, V0inv);
 	   P.SetDiagonalBlock(1, S0inv);
@@ -562,6 +571,12 @@ int main(int argc, char *argv[])
 	   }
 	   else
 	   {
+		  if(user_pcg_prec_rtol>0){
+	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
+	   	  }
+	   	  if(user_pcg_prec_maxit>0){
+	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
+	   	  }
 		  Shatinv2 = new HyprePCG( *Shat2 );
 	      Shatinv2->SetPrintLevel(0);
 	      Shatinv2->SetTol(prec_rtol);
@@ -583,7 +598,7 @@ int main(int argc, char *argv[])
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);
 	   pcg.SetRelTol(1e-9);
-	   pcg.SetMaxIter(150);
+	   pcg.SetMaxIter(200);
 	   pcg.SetPrintLevel(solver_print_opt);
 	   pcg.Mult(b,x);
 	   MPI_Barrier(MPI_COMM_WORLD);
