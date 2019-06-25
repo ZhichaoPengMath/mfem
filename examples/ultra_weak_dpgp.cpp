@@ -70,6 +70,8 @@ int main(int argc, char *argv[])
    double user_pcg_prec_rtol = -1.;
    int user_pcg_prec_maxit = -1;
 
+   int prec_amg = 1;
+
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
@@ -110,6 +112,9 @@ int main(int argc, char *argv[])
 
    args.AddOption(&user_pcg_prec_maxit, "-prec_iter", "--prec_iter",
 				  " max iter for the cg solver in preconditioner");
+
+   args.AddOption(&prec_amg, "-prec_amg", "--prec_amg",
+				  " use amg preconditionner for all the block or not, 1 by default");
 
    args.Parse();
    if (!args.Good())
@@ -384,7 +389,7 @@ int main(int argc, char *argv[])
 
    delete B_mass_q;
    delete B_u_dot_div;
-   delete B_u_normal_jump;
+//   delete B_u_normal_jump;
    delete B_q_weak_div;
    delete B_q_jump;
 
@@ -511,17 +516,22 @@ int main(int argc, char *argv[])
 	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
 
 	   /********************************************************/
-//	   ParMixedBilinearForm *Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
-//	   Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
-//	   Sjump->Assemble();
-//	   Sjump->Finalize();
-//	   HypreParMatrix * matSjump=Sjump->ParallelAssemble(); delete Sjump;
-//	   HypreParMatrix * Shat   = RAP(matSjump, matVinv, matSjump);
+	   ParMixedBilinearForm *Sjump = NULL;
+			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+	   		Sjump->Assemble();
+	   		Sjump->Finalize();
+	   		Sjump->SpMat() *= 1e-2;
+	   		Sjump->SpMat() += B_u_normal_jump->SpMat();
+	   		HypreParMatrix * matSjump=Sjump->ParallelAssemble(); delete Sjump;
+	   delete B_u_normal_jump;
+	   HypreParMatrix * Shat   = RAP(matSjump, matVinv, matSjump);
 	   /********************************************************/
 	   /* this one not work with AMG, the difference is whether the  essential dof is removed */
 	   HypreParMatrix * Shat2   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
 	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
-   	   HypreSolver *Vhatinv=NULL, *Shatinv=NULL;
+   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
+	   HypreBoomerAMG *Shatinv = NULL;
 	   
 	   V0inv = new HypreBoomerAMG( *matV0 );
 	   V0inv->SetPrintLevel(0);
@@ -544,11 +554,11 @@ int main(int argc, char *argv[])
 	   P.SetDiagonalBlock(2, Vhatinv);
 
 	   HyprePCG *Shatinv2=NULL;
-	   if (true)
+	   if (prec_amg == 1)
 	   {
-	   	  Shatinv = new HypreBoomerAMG( *Shat2 );
+	   	  Shatinv = new HypreBoomerAMG( *Shat );
+		  Shatinv->SetPrintLevel(0);
 	      P.SetDiagonalBlock(3, Shatinv);
-	   	  //Hypre *Shatinv = new HypreBoomerAMG( *Shat2 );
 	   }
 	   else
 	   {
