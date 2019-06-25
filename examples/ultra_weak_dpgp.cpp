@@ -520,46 +520,49 @@ int main(int argc, char *argv[])
 	   /********************************************************/
 	   /* this one not work with AMG, the difference is whether the  essential dof is removed */
 	   HypreParMatrix * Shat2   = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
-
-
-
-
-	   HypreBoomerAMG *V0inv = new HypreBoomerAMG( *matV0 );
+	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
+   	   HypreSolver *Vhatinv=NULL, *Shatinv=NULL;
+	   
+	   V0inv = new HypreBoomerAMG( *matV0 );
 	   V0inv->SetPrintLevel(0);
-	
-	   HypreBoomerAMG *S0inv = new HypreBoomerAMG( *AmatS0 );
+	   S0inv = new HypreBoomerAMG( *AmatS0 );
 	   S0inv->SetPrintLevel(0);
-
-   	   HypreSolver *Vhatinv;
    	   if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
    	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
-
-//	   HypreBoomerAMG *Shatinv = new HypreBoomerAMG( *Shat2 );
-//	   Shatinv->SetPrintLevel(0);
-
-
+	   
 	   double prec_rtol = 1e-3;
 	   int prec_maxit = 200;
 	   if(user_pcg_prec_rtol>0){
-			prec_rtol = user_pcg_prec_rtol;
+	    	prec_rtol = user_pcg_prec_rtol;
 	   }
 	   if(user_pcg_prec_maxit>0){
-			prec_maxit = user_pcg_prec_maxit;
+	    	prec_maxit = user_pcg_prec_maxit;
 	   }
-
-	   HyprePCG * Shatinv = new HyprePCG( *Shat2 );
-	   Shatinv->SetTol(prec_rtol);
-	   Shatinv->SetMaxIter(prec_maxit);
-
-//	   Shatinv->SetPrintLevel(1);
-	
-
 	   BlockDiagonalPreconditioner P(offsets);
 	   P.SetDiagonalBlock(0, V0inv);
 	   P.SetDiagonalBlock(1, S0inv);
 	   P.SetDiagonalBlock(2, Vhatinv);
-	   P.SetDiagonalBlock(3, Shatinv);
 
+	   HyprePCG *Shatinv2=NULL;
+	   if (true)
+	   {
+	   	  Shatinv = new HypreBoomerAMG( *Shat2 );
+	      P.SetDiagonalBlock(3, Shatinv);
+	   	  //Hypre *Shatinv = new HypreBoomerAMG( *Shat2 );
+	   }
+	   else
+	   {
+		  Shatinv2 = new HyprePCG( *Shat2 );
+	      Shatinv2->SetPrintLevel(0);
+	      Shatinv2->SetTol(prec_rtol);
+	      Shatinv2->SetMaxIter(prec_maxit);
+	      P.SetDiagonalBlock(3, Shatinv2);
+	   }
+
+//	   Shatinv->SetPrintLevel(1);
+	
+
+//
 //	// 10. Solve the normal equation system using the PCG iterative solver.
 //	//     Check the weighted norm of residual for the DPG least square problem.
 //	//     Wrap the primal variable in a GridFunction for visualization purposes.
@@ -673,6 +676,7 @@ int main(int argc, char *argv[])
    delete S0inv;
    delete Vhatinv;
    delete Shatinv;
+   delete Shatinv2;
    /* finite element collection */
    delete u0_fec;
    delete q0_fec;
