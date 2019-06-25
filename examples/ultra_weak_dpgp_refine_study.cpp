@@ -402,8 +402,6 @@ int main(int argc, char *argv[])
 	   HypreParMatrix *matVinv = Vinv->ParallelAssemble();
 	   HypreParMatrix *matSinv = Sinv->ParallelAssemble();
 	
-	   delete Vinv;
-	   delete Sinv;
 		
 	
 		/************************************************/
@@ -617,20 +615,28 @@ int main(int argc, char *argv[])
 	
 	//   // 13. Free the used memory.
 		/* bilinear form */
-	//   delete Vinv;
-	//   delete Sinv; 
-	//
-	//   delete matV00;
-	//   delete matV0;
-	////   delete matS0;
-	//   delete Vhat;
-	//   delete Shat;
-	//
-	//   /* preconditionner */
+		delete Vinv;
+   		delete Sinv; 
+		/* matrix */
+   		delete matB_mass_q;
+   		delete matB_u_dot_div;
+   		delete matB_u_normal_jump;
+   		delete matB_q_weak_div;
+   		delete matB_q_jump;
+   		delete matVinv;
+   		delete matSinv;
+
+   		delete AmatS0;
+   		delete matV0;
+   		delete Vhat;
+   		delete Shat2;
+   		delete Shat;
+	   /* preconditionner */
 	   delete V0inv;
 	   delete S0inv;
 	   delete Vhatinv;
 	   delete Shatinv;
+	   delete Shatinv2;
 	   /* finite element collection */
 	   delete u0_fec;
 	   delete q0_fec;

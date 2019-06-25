@@ -696,6 +696,7 @@ int main(int argc, char *argv[])
    delete matV0;
    delete Vhat;
    delete Shat2;
+   delete Shat;
 //   /* preconditionner */
    delete V0inv;
    delete S0inv;
