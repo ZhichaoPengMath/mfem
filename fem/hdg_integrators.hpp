@@ -133,13 +133,13 @@ public:
 class HDGDomainIntegratorDiffusion : public BilinearFormIntegrator
 {
 private:
-   ConstantCoefficient *nu;
+   Coefficient *nu;
 
    Vector shape, divshape;
    DenseMatrix partelmat, dshape, gshape, Jadj;
 
 public:
-   HDGDomainIntegratorDiffusion(ConstantCoefficient &_nu)
+   HDGDomainIntegratorDiffusion(Coefficient &_nu)
       : nu(&_nu) { }
 
    using BilinearFormIntegrator::AssembleElementMatrix2FES;
