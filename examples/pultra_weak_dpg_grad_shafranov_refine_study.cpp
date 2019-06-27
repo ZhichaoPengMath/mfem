@@ -42,8 +42,7 @@ double r_exact(const Vector & x);
 void  zero_fun(const Vector & x, Vector & f);
 void  q_exact(const Vector & x, Vector & f);
 
-double alpha_pzc = 100.;
-int atan_opt = 0;
+int sol_opt = 0;
 
 int main(int argc, char *argv[])
 {
@@ -53,7 +52,7 @@ int main(int argc, char *argv[])
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
+   const char *mesh_file; 
    int order = 1;
    bool visualization = 1;
    bool q_visual = 0;
@@ -66,8 +65,6 @@ int main(int argc, char *argv[])
 
    int total_refine_level = 1;
 
-   atan_opt = 0;/* which exact solution to use */
-
    double c_divdiv = 1.;
    double c_gradgrad = 1.;
 
@@ -78,8 +75,6 @@ int main(int argc, char *argv[])
    double amg_perturbation = 1e-2;
 
    OptionsParser args(argc, argv);
-   args.AddOption(&mesh_file, "-m", "--mesh",
-                  "Mesh file to use.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
@@ -88,8 +83,6 @@ int main(int argc, char *argv[])
    args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
                   "--no-visualization-for-grad-term",
                   "Enable or disable GLVis visualization for grad term.");
-   args.AddOption(&alpha_pzc, "-alpha", "--alpha",
-                  "arctan( alpha * x) as exact solution");
    args.AddOption(&ref_levels, "-r", "--refine",
                   "Number of times to refine the mesh uniformly, -1 by default.");
 //   args.AddOption(&divdiv_opt, "-divdiv", "--divdiv",
@@ -109,10 +102,6 @@ int main(int argc, char *argv[])
    args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
 				  " use lower order rt trace or not, 0 by default");
 
-   args.AddOption(&atan_opt, "-atan", "--atan",
-				  " which exact solution to use, 0 by default, sin + polynomial by default");
-
-
    args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
 				  " relative tolerance for the cg solver in preconditioner");
 
@@ -125,6 +114,21 @@ int main(int argc, char *argv[])
    args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
 				  " the perturbation for the last diagonal block in the preconditioner");
 
+   args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
+				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
+   args.Parse();
+
+   if(sol_opt == 1){
+		mesh_file = "../data/cerfon_iter_quad.mesh";
+   }
+   else if(sol_opt == 2){
+		mesh_file = "../data/cerfon_nstx_quad.mesh";
+   }
+   else{
+		mesh_file = "../data/inline-quad-pzc2.mesh";
+   }
+   args.AddOption(&mesh_file, "-m", "--mesh",
+                  "Mesh file to use.");
    args.Parse();
    if (!args.Good())
    {
@@ -572,9 +576,6 @@ int main(int argc, char *argv[])
 		   u0.Distribute( x.GetBlock(u0_var) );
 		   q0.Distribute( x.GetBlock(q0_var) );
 	
-	//	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
-	//	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
-	
 		   u_l2_error(ref_i) = abs(u0.ComputeL2Error(u_coeff)  );
 		   q_l2_error(ref_i) = abs(q0.ComputeL2Error(q_coeff)  );
 	
@@ -722,17 +723,23 @@ double f_exact(const Vector & x){
 		 double xi(x(0) );
 		 double yi(x(1) );
 
-		 return  -6. *M_PI * cos(2.*M_PI * xi) 
-			    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
-				+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		 if(sol_opt == 0){
+			 return  -6. *M_PI * cos(2.*M_PI * xi) 
+				    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
+					+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		 }
+		 else if( (sol_opt == 1) || (sol_opt == 2) ){
+			 // r^2/r
+			return -x(0);
+		 }
+		 else{
+			return 0;
+		 }
 	}
 	else if(x.Size() == 3){
 		return 12.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
 	}
 	else if(x.Size() == 1){
-//		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
-//				(1+alpha_pzc*alpha_pzc*x(0)*x(0) )/
-//				(1+alpha_pzc*alpha_pzc*x(0)*x(0) );
 		return 4.*M_PI*M_PI*sin( 2.*M_PI* x(0) ) ;
 	}
 	else{
@@ -747,13 +754,37 @@ double u_exact(const Vector & x){
 		double xi(x(0) );
 		double yi(x(1) );
 
-		return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+		if(sol_opt == 0){
+			return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+		}
+		else if(sol_opt == 1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+		}
+		else if(sol_opt == 2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+		}
+		else{
+			return 0;
+		}
 	}
 	else if(x.Size() ==3 ){
 		return x(0) + sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) ); 
 	}
 	else if(x.Size() == 1){
-		return atan(alpha_pzc * (x(0)-0.5)  );
 		return sin(2. * M_PI* x(0) ) ;
 	}
 	else{
@@ -763,25 +794,50 @@ double u_exact(const Vector & x){
 }
 
 /* exact q = -grad u */
-void q_exact(const Vector & x,Vector & f){
+void q_exact(const Vector & x,Vector & q){
 	if(x.Size() == 2){
 		 double xi(x(0) );
 		 double yi(x(1) );
 
-		 f(0) =-2 * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
-		       -xi* (2.*M_PI * cos(2.*M_PI*xi) );
-		 f(1) =-xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+		 if(sol_opt == 0){
+			q(0) =-2 * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
+		 	      -xi* (2.*M_PI * cos(2.*M_PI*xi) );
+		 	q(1) =-xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+		 }
+		 else if(sol_opt ==1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
+
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+		 }
+		 else if(sol_opt ==2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+		 }
+		 else{
+			q = 0.;
+		 }
 	}
 	else if(x.Size() == 3){
-		f(0) = -1. - 2.*M_PI* cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
-		f(1) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
-		f(2) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * cos(2.*M_PI*x(2) );
+		q(0) = -1. - 2.*M_PI* cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
+		q(1) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
+		q(2) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * cos(2.*M_PI*x(2) );
 	}
 	else if(x.Size() == 1){
-		f(0) = -2.*M_PI * cos(2.*M_PI* x(0) );
+		q(0) = -2.*M_PI * cos(2.*M_PI* x(0) );
 	}
 	else{
-		f  = 0.;
+		q  = 0.;
 	}
 }
 
