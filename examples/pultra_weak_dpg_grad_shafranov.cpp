@@ -42,6 +42,8 @@ double q_trace_exact(const Vector & x);
 void  zero_fun(const Vector & x, Vector & f);
 void  q_exact(const Vector & x, Vector & f);
 
+int sol_opt = 0;
+
 
 int main(int argc, char *argv[])
 {
@@ -51,7 +53,9 @@ int main(int argc, char *argv[])
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
+   const char * mesh_file;
+   mesh_file = "../data/cerfon_iter_quad.mesh";
+//   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
    int order = 1;
    bool visualization = 1;
    bool q_visual = 0;
@@ -72,8 +76,6 @@ int main(int argc, char *argv[])
    double amg_perturbation = 1e-2;
 
    OptionsParser args(argc, argv);
-   args.AddOption(&mesh_file, "-m", "--mesh",
-                  "Mesh file to use.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
@@ -113,8 +115,24 @@ int main(int argc, char *argv[])
    args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
 				  " the perturbation for the last diagonal block in the preconditioner");
 
+   args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
+				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
 
    args.Parse();
+   if(sol_opt == 1){
+		mesh_file = "../data/cerfon_iter_quad.mesh";
+   }
+   else if(sol_opt == 2){
+		mesh_file = "../data/cerfon_nstx_quad.mesh";
+   }
+   else{
+		mesh_file = "../data/inline-quad-pzc2.mesh";
+   }
+   args.AddOption(&mesh_file, "-m", "--mesh",
+                  "Mesh file to use.");
+   args.Parse();
+
+
    if (!args.Good())
    {
 	   if(myid==0){
@@ -126,6 +144,7 @@ int main(int argc, char *argv[])
    if(myid==0){
 		args.PrintOptions(cout);
    }
+
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -730,9 +749,18 @@ double f_exact(const Vector & x){
 		 double xi(x(0) );
 		 double yi(x(1) );
 
-		 return  -6. *M_PI * cos(2.*M_PI * xi) 
-			    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
-				+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		 if(sol_opt == 0){
+			 return  -6. *M_PI * cos(2.*M_PI * xi) 
+				    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
+					+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		 }
+		 else if( (sol_opt == 1) || (sol_opt == 2) ){
+			 // r^2/r
+			return -x(0);
+		 }
+		 else{
+			return 0;
+		 }
 	}
 	else{
 		return 0;
@@ -746,7 +774,32 @@ double u_exact(const Vector & x){
 		double xi(x(0) );
 		double yi(x(1) );
 
-		return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+		if(sol_opt == 0){
+			return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+		}
+		else if(sol_opt == 1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+		}
+		else if(sol_opt == 2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+		}
+		else{
+			return 0;
+		}	
 	}
 	else{
 		return 0;
@@ -760,10 +813,34 @@ void q_exact(const Vector & x,Vector & q){
 		 double xi(x(0) );
 		 double yi(x(1) );
 
-		 q(0) =-2 * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
-			   -xi* (2.*M_PI * cos(2.*M_PI*xi) );
-		 q(1) =-xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+		 if(sol_opt == 0){
+			q(0) =-2 * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
+		 	      -xi* (2.*M_PI * cos(2.*M_PI*xi) );
+		 	q(1) =-xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+		 }
+		 else if(sol_opt ==1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
 
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+		 }
+		 else if(sol_opt ==2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+		 }
+		 else{
+			q = 0.;
+		 }
 	}
 	else{
 		q  = 0.;
