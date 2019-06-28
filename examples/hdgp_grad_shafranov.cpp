@@ -705,7 +705,7 @@ double uFun_ex(const Vector & x)
       case 2:
       {
 		  if(sol_opt == 0){
-				return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+				return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
 		  }
 		  else if(sol_opt == 1){
 			double d1 =  0.075385029660066;
@@ -756,9 +756,9 @@ void qFun_ex(const Vector & x, Vector & q)
       case 2:
       {
 		  if(sol_opt == 0){
-				q(0) = 2*xi * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
-		 		      +xi*xi* (2.*M_PI * cos(2.*M_PI*xi) );
-		 		q(1) = xi*xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+				q(0) = 2*xi * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
+		 		      +xi*xi* (4.*M_PI * cos(4.*M_PI*xi) );
+		 		q(1) = xi*xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
 
 		 		q /= -xi;
 		  }
@@ -817,9 +817,9 @@ double fFun(const Vector & x)
       case 2:
       {
 		  if(sol_opt == 0){
-				 return  -6. *M_PI * cos(2.*M_PI * xi) 
-					    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
-						+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+				 return  -12. *M_PI * cos(4.*M_PI * xi) 
+					    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
+						+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi);
 		  }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			return -x(0);
