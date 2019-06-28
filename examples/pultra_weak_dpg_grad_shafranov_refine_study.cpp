@@ -175,6 +175,7 @@ int main(int argc, char *argv[])
 	int org_element_number = mesh->GetGlobalNE();
 
 	Vector u_l2_error(total_refine_level), q_l2_error(total_refine_level), dual_norm_error(total_refine_level);
+	Vector u_max_error(total_refine_level), q_max_error(total_refine_level);
    // 4. Define the trial, interfacial (trace) and test DPG spaces:
    //		q = grad u
    //		qhat trace q\codt n, trace H(div),
@@ -578,6 +579,9 @@ int main(int argc, char *argv[])
 	
 		   u_l2_error(ref_i) = abs(u0.ComputeL2Error(u_coeff)  );
 		   q_l2_error(ref_i) = abs(q0.ComputeL2Error(q_coeff)  );
+
+		   u_max_error(ref_i) = abs(u0.ComputeMaxError(u_coeff)  );
+		   q_max_error(ref_i) = abs(q0.ComputeMaxError(q_coeff)  );
 	
 		
 		   // 11. Save the refined mesh and the solution. This output can be viewed
@@ -674,7 +678,7 @@ int main(int argc, char *argv[])
 	   std::cout<< endl<<endl<<" original element number: "<< org_element_number<<endl<<endl;
 	   std::cout << "------------------------------------------------------------------------\n";
 	   std::cout <<
-	             "level  u_l2errors  order   q_l2errors  order    residual   order   \n";
+	             "level  u_l2errors  order   q_max_errors  order    residual   order   \n";
 	   std::cout << "----------------------------------------------------------------------------\n";
 	   for (int ref_levels = 0; ref_levels < total_refine_level; ref_levels++)
 	   {
@@ -693,14 +697,16 @@ int main(int argc, char *argv[])
 	      {
 	         double u_order     = log(u_l2_error(ref_levels)/u_l2_error(ref_levels-1))/log(
 	                                 0.5);
-	         double q_order     = log(q_l2_error(ref_levels)/q_l2_error(ref_levels-1))/log(
+	         double q_order     = log(q_max_error(ref_levels)/q_max_error(ref_levels-1))/log(
 	                                 0.5);
+//	         double q_order     = log(q_l2_error(ref_levels)/q_l2_error(ref_levels-1))/log(
+//	                                 0.5);
 	         double dual_order  = log(dual_norm_error(ref_levels)/dual_norm_error(ref_levels-1))/log(
 	                                 0.5);
 	         std::cout << "  " << ref_levels << "    "
 	                   << std::setprecision(2) << std::scientific << u_l2_error(ref_levels)
 	                   << "  " << std::setprecision(4) << std::fixed << u_order
-	                   << "    " << std::setprecision(2) << std::scientific << q_l2_error(ref_levels)
+	                   << "    " << std::setprecision(2) << std::scientific << q_max_error(ref_levels)
 	                   << "   " << std::setprecision(4) << std::fixed << q_order
 	                   << "    " << std::setprecision(2) << std::scientific << dual_norm_error(ref_levels)
 	                   << "   " << std::setprecision(4) << std::fixed << dual_order
