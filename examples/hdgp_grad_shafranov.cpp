@@ -232,6 +232,9 @@ int main(int argc, char *argv[])
    Vector u_maxerrors(total_ref_levels), q_maxerrors(total_ref_levels),
           mean_l2errors(total_ref_levels), u_star_maxerrors(total_ref_levels);
 
+   Vector u_l2errors(total_ref_levels), q_l2errors(total_ref_levels),
+          u_star_l2errors(total_ref_levels);
+
    // 5. Define a finite element collections and spaces on the mesh.
    FiniteElementCollection *dg_coll(new DG_FECollection(order, dim));
    FiniteElementCollection *face(new DG_Interface_FECollection(order, dim));
@@ -346,7 +349,7 @@ int main(int argc, char *argv[])
          chrono.Stop();
 
          if (verbose)
-         {
+          {
             if (petsc_solver->GetConverged())
                std::cout << "Solver converged in " << petsc_solver->GetNumIterations()
                          << " iterations with a residual norm of " << petsc_solver->GetFinalNorm() <<
@@ -421,16 +424,29 @@ int main(int argc, char *argv[])
 
       if (verbose)
       {
-//         std::cout << "|| u_h - u_ex || / || u_ex || = " << err_u / norm_u << "\n";
-//         std::cout << "|| q_h - q_ex || / || q_ex || = " << err_q / norm_q << "\n";
-         std::cout << "|| u_h - u_ex || = " << err_u << "\n";
-         std::cout << "|| q_h - q_ex || = " << err_q << "\n";
-         std::cout << "|| mean(u_h) - mean(u_ex) || = " << err_mean << "\n";
+         std::cout << "|| u_h - u_ex ||_max = " << err_u << "\n";
+         std::cout << "|| q_h - q_ex ||_max = " << err_q << "\n";
       }
 
       u_maxerrors(ref_levels-initial_ref_levels) = fabs(err_u);
       q_maxerrors(ref_levels-initial_ref_levels) = fabs(err_q);
       mean_l2errors(ref_levels-initial_ref_levels) = fabs(err_mean);
+
+       err_u   = u_variable.ComputeL2Error(ucoeff, irs);
+       err_q   = q_variable.ComputeL2Error(qcoeff, irs);
+
+      if (verbose)
+      {
+         std::cout << "|| u_h - u_ex ||_l2 / || u_ex ||_l2 = " << err_u / norm_u << "\n";
+         std::cout << "|| q_h - q_ex ||_l2 / || q_ex ||_l2 = " << err_q / norm_q << "\n";
+         std::cout << "|| u_h - u_ex ||_l2 = " << err_u << "\n";
+         std::cout << "|| q_h - q_ex ||_l2 = " << err_q << "\n";
+         std::cout << "|| mean(u_h) - mean(u_ex) ||_l2 = " << err_mean << "\n";
+      }
+
+//      err_mean  = q_variable.ComputeMeanLpError(2.0, qcoeff, irs);
+      u_l2errors(ref_levels-initial_ref_levels) = fabs(err_u);
+      q_l2errors(ref_levels-initial_ref_levels) = fabs(err_q);
 
 
       // 14. Save the mesh and the solution.
@@ -506,12 +522,15 @@ int main(int argc, char *argv[])
             irs[i] = &(IntRules.Get(i, order_quad));
          }
          double err_u_post   = u_post.ComputeMaxError(ucoeff, irs);
-
          u_star_maxerrors(ref_levels-initial_ref_levels) = fabs(err_u_post);
+
+         double err_u_post_l2   = u_post.ComputeL2Error(ucoeff, irs);
+         u_star_l2errors(ref_levels-initial_ref_levels) = fabs(err_u_post_l2);
 
          if (verbose)
          {
-            std::cout << "|| u^*_h - u_ex || = " << err_u_post << "\n";
+            std::cout << "|| u^*_h - u_ex ||_l2 = " << err_u_post_l2 << "\n";
+            std::cout << "|| u^*_h - u_ex ||_max = " << err_u_post << "\n";
          }
 
          if (save)
@@ -567,6 +586,48 @@ int main(int argc, char *argv[])
    // 18. Print the results
    if (verbose)
    {
+	  /******************************************/
+      std::cout << "\n\n-----------------------\n";
+      std::cout <<
+                "level  u_l2errors  order   q_l2errors  order   mean_l2errors  order u_star_l2errors   order\n";
+      std::cout << "-----------------------\n";
+      for (int ref_levels = 0; ref_levels < total_ref_levels; ref_levels++)
+      {
+         if (ref_levels == 0)
+         {
+            std::cout << "  " << ref_levels << "   "
+                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
+                      << "   " << " -      "
+                      << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
+                      << "    " << " -      "
+                      << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
+                      << "    " << " -      "
+                      << std::setprecision(2) << std::scientific << u_star_l2errors(ref_levels)
+                      << "    " << " -      " << std::endl;
+         }
+         else
+         {
+            double u_order    = log(u_l2errors(ref_levels)/u_l2errors(ref_levels-1))/log(
+                                   0.5);
+            double q_order    = log(q_l2errors(ref_levels)/q_l2errors(ref_levels-1))/log(
+                                   0.5);
+            double mean_order   = log(mean_l2errors(ref_levels)/mean_l2errors(
+                                         ref_levels-1))/log(0.5);
+            double u_star_order = log(u_star_l2errors(ref_levels)/u_star_l2errors(
+                                         ref_levels-1))/log(0.5);
+            std::cout << "  " << ref_levels << "   "
+                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
+                      << "  " << std::setprecision(4) << std::fixed << u_order
+                      << "   " << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
+                      << "   " << std::setprecision(4) << std::fixed << q_order
+                      << "   " << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
+                      << "   " << std::setprecision(4) << std::fixed << mean_order
+                      << "   " << std::setprecision(2) << std::scientific << u_star_l2errors(
+                         ref_levels)
+                      << "   " << std::setprecision(4) << std::fixed << u_star_order << std::endl;
+         }
+      }
+	  /******************************************/
       std::cout << "\n\n-----------------------\n";
       std::cout <<
                 "level  u_maxerrors  order   q_maxerrors  order   mean_l2errors  order u_star_maxerrors   order\n";
@@ -607,6 +668,7 @@ int main(int argc, char *argv[])
                       << "   " << std::setprecision(4) << std::fixed << u_star_order << std::endl;
          }
       }
+	  /******************************************/
    }
 
    // 19. Free the used memory.
