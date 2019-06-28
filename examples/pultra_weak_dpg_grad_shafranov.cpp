@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 //   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
    int order = 1;
    bool visualization = 1;
-   bool q_visual = 0;
+   bool q_visual = 1;
    int ref_levels = -1;
    int gradgrad_opt = 0;
    int solver_print_opt = 0;
@@ -754,9 +754,9 @@ double f_exact(const Vector & x){
 		 double yi(x(1) );
 
 		 if(sol_opt == 0){
-			 return  -6. *M_PI * cos(2.*M_PI * xi) 
-				    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
-					+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+			 return  -12. *M_PI * cos(4.*M_PI * xi) 
+				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
+					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi);
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r
@@ -779,7 +779,7 @@ double u_exact(const Vector & x){
 		double yi(x(1) );
 
 		if(sol_opt == 0){
-			return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
 		}
 		else if(sol_opt == 1){
 			double d1 =  0.075385029660066;
@@ -818,9 +818,9 @@ void q_exact(const Vector & x,Vector & q){
 		 double yi(x(1) );
 
 		 if(sol_opt == 0){
-			q(0) =-2 * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
-		 	      -xi* (2.*M_PI * cos(2.*M_PI*xi) );
-		 	q(1) =-xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
+		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
+		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
 		 }
 		 else if(sol_opt ==1){
 			double d1 =  0.075385029660066;
