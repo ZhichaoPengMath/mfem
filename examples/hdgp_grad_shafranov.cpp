@@ -52,6 +52,8 @@ void qFun_ex(const Vector & x, Vector & q);
 double fFun(const Vector & x);
 double diff;
 
+int sol_opt = 0;
+
 // We can minimize the expression |\nu \nabla u_h^* + q_h |^2 over a single element K,
 // for p+1 degree u_h^*, with the constraint \int_K u_h^* = \int_K u_h, so the mean
 // of u_h^* is the same as the one of u_h.
@@ -113,8 +115,6 @@ int main(int argc, char *argv[])
    const char *petscrc_file = "";
 
    OptionsParser args(argc, argv);
-   args.AddOption(&mesh_file, "-m", "--mesh",
-                  "Mesh file to use.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
    args.AddOption(&initial_ref_levels, "-r", "--refine",
@@ -139,8 +139,23 @@ int main(int argc, char *argv[])
                   "Enable or disable SC solver.");
    args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
                   "PetscOptions file to use.");
-
+   args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
+				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
    args.Parse();
+
+   if(sol_opt == 1){
+		mesh_file = "../data/cerfon_iter_quad.mesh";
+   }
+   else if(sol_opt == 2){
+		mesh_file = "../data/cerfon_nstx_quad.mesh";
+   }
+   else{
+		mesh_file = "../data/inline-quad-pzc2.mesh";
+   }
+   args.AddOption(&mesh_file, "-m", "--mesh",
+                  "Mesh file to use.");
+   args.Parse();
+
    if (!args.Good())
    {
       if (verbose)
@@ -214,8 +229,8 @@ int main(int argc, char *argv[])
    delete mesh;
 
    // 4. Vectors for the different discretization errors
-   Vector u_l2errors(total_ref_levels), q_l2errors(total_ref_levels),
-          mean_l2errors(total_ref_levels), u_star_l2errors(total_ref_levels);
+   Vector u_maxerrors(total_ref_levels), q_maxerrors(total_ref_levels),
+          mean_l2errors(total_ref_levels), u_star_maxerrors(total_ref_levels);
 
    // 5. Define a finite element collections and spaces on the mesh.
    FiniteElementCollection *dg_coll(new DG_FECollection(order, dim));
@@ -398,23 +413,23 @@ int main(int argc, char *argv[])
          irs[i] = &(IntRules.Get(i, order_quad));
       }
 
-      double err_u   = u_variable.ComputeL2Error(ucoeff, irs);
+      double err_u   = u_variable.ComputeMaxError(ucoeff, irs);
       double norm_u   = ComputeGlobalLpNorm(2., ucoeff, *pmesh, irs);
-      double err_q   = q_variable.ComputeL2Error(qcoeff, irs);
+      double err_q   = q_variable.ComputeMaxError(qcoeff, irs);
       double norm_q   = ComputeGlobalLpNorm(2., qcoeff, *pmesh, irs);
       double err_mean  = u_variable.ComputeMeanLpError(2.0, ucoeff, irs);
 
       if (verbose)
       {
-         std::cout << "|| u_h - u_ex || / || u_ex || = " << err_u / norm_u << "\n";
-         std::cout << "|| q_h - q_ex || / || q_ex || = " << err_q / norm_q << "\n";
+//         std::cout << "|| u_h - u_ex || / || u_ex || = " << err_u / norm_u << "\n";
+//         std::cout << "|| q_h - q_ex || / || q_ex || = " << err_q / norm_q << "\n";
          std::cout << "|| u_h - u_ex || = " << err_u << "\n";
          std::cout << "|| q_h - q_ex || = " << err_q << "\n";
          std::cout << "|| mean(u_h) - mean(u_ex) || = " << err_mean << "\n";
       }
 
-      u_l2errors(ref_levels-initial_ref_levels) = fabs(err_u);
-      q_l2errors(ref_levels-initial_ref_levels) = fabs(err_q);
+      u_maxerrors(ref_levels-initial_ref_levels) = fabs(err_u);
+      q_maxerrors(ref_levels-initial_ref_levels) = fabs(err_q);
       mean_l2errors(ref_levels-initial_ref_levels) = fabs(err_mean);
 
 
@@ -490,9 +505,9 @@ int main(int argc, char *argv[])
          {
             irs[i] = &(IntRules.Get(i, order_quad));
          }
-         double err_u_post   = u_post.ComputeL2Error(ucoeff, irs);
+         double err_u_post   = u_post.ComputeMaxError(ucoeff, irs);
 
-         u_star_l2errors(ref_levels-initial_ref_levels) = fabs(err_u_post);
+         u_star_maxerrors(ref_levels-initial_ref_levels) = fabs(err_u_post);
 
          if (verbose)
          {
@@ -554,40 +569,40 @@ int main(int argc, char *argv[])
    {
       std::cout << "\n\n-----------------------\n";
       std::cout <<
-                "level  u_l2errors  order   q_l2errors  order   mean_l2errors  order u_star_l2errors   order\n";
+                "level  u_maxerrors  order   q_maxerrors  order   mean_l2errors  order u_star_maxerrors   order\n";
       std::cout << "-----------------------\n";
       for (int ref_levels = 0; ref_levels < total_ref_levels; ref_levels++)
       {
          if (ref_levels == 0)
          {
             std::cout << "  " << ref_levels << "   "
-                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
+                      << std::setprecision(2) << std::scientific << u_maxerrors(ref_levels)
                       << "   " << " -      "
-                      << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
+                      << std::setprecision(2) << std::scientific << q_maxerrors(ref_levels)
                       << "    " << " -      "
                       << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
                       << "    " << " -      "
-                      << std::setprecision(2) << std::scientific << u_star_l2errors(ref_levels)
+                      << std::setprecision(2) << std::scientific << u_star_maxerrors(ref_levels)
                       << "    " << " -      " << std::endl;
          }
          else
          {
-            double u_order    = log(u_l2errors(ref_levels)/u_l2errors(ref_levels-1))/log(
+            double u_order    = log(u_maxerrors(ref_levels)/u_maxerrors(ref_levels-1))/log(
                                    0.5);
-            double q_order    = log(q_l2errors(ref_levels)/q_l2errors(ref_levels-1))/log(
+            double q_order    = log(q_maxerrors(ref_levels)/q_maxerrors(ref_levels-1))/log(
                                    0.5);
             double mean_order   = log(mean_l2errors(ref_levels)/mean_l2errors(
                                          ref_levels-1))/log(0.5);
-            double u_star_order = log(u_star_l2errors(ref_levels)/u_star_l2errors(
+            double u_star_order = log(u_star_maxerrors(ref_levels)/u_star_maxerrors(
                                          ref_levels-1))/log(0.5);
             std::cout << "  " << ref_levels << "   "
-                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
+                      << std::setprecision(2) << std::scientific << u_maxerrors(ref_levels)
                       << "  " << std::setprecision(4) << std::fixed << u_order
-                      << "   " << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
+                      << "   " << std::setprecision(2) << std::scientific << q_maxerrors(ref_levels)
                       << "   " << std::setprecision(4) << std::fixed << q_order
                       << "   " << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
                       << "   " << std::setprecision(4) << std::fixed << mean_order
-                      << "   " << std::setprecision(2) << std::scientific << u_star_l2errors(
+                      << "   " << std::setprecision(2) << std::scientific << u_star_maxerrors(
                          ref_levels)
                       << "   " << std::setprecision(4) << std::fixed << u_star_order << std::endl;
          }
@@ -627,8 +642,34 @@ double uFun_ex(const Vector & x)
    {
       case 2:
       {
-		  return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
-//         return 1.0 + xi + sin(2.0*M_PI*xi)*sin(2.0*M_PI*yi);
+		  if(sol_opt == 0){
+				return xi * xi * (sin(2*M_PI*xi) + sin(2*M_PI*yi) + yi );
+		  }
+		  else if(sol_opt == 1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+
+		  }
+		  else if(sol_opt == 2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			return   1./8.* pow(x(0),4)
+				   + d1
+				   + d2 * x(0)*x(0)
+				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+
+		  }
+		  else{
+			return 0.;
+		  }
          break;
       }
       case 3:
@@ -652,11 +693,38 @@ void qFun_ex(const Vector & x, Vector & q)
    {
       case 2:
       {
-		 q(0) = 2*xi * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
-			   +xi*xi* (2.*M_PI * cos(2.*M_PI*xi) );
-		 q(1) = xi*xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
+		  if(sol_opt == 0){
+				q(0) = 2*xi * (sin(2.*M_PI*xi) + sin(2.*M_PI*yi) + yi)
+		 		      +xi*xi* (2.*M_PI * cos(2.*M_PI*xi) );
+		 		q(1) = xi*xi* (2.*M_PI * cos(2.*M_PI*yi) + 1 );
 
-		 q /= -xi;
+		 		q /= -xi;
+		  }
+		  else if(sol_opt == 1){
+			double d1 =  0.075385029660066;
+			double d2 = -0.206294962187880;
+			double d3 = -0.031433707280533;
+
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+
+		  }
+		  else if(sol_opt == 2){
+			double d1 =  0.015379895031306;
+    		double d2 = -0.322620578214426;
+    		double d3 = -0.024707604384971;
+
+			q(0) = -1./2. * pow( x(0),2 )
+				   -d2*2.
+				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+			q(1) = -d3*( -8.* x(0) * x(1) );
+
+		  }
+		  else {
+				q = 0.;
+		  }
          break;
       }
       case 3:
@@ -686,9 +754,17 @@ double fFun(const Vector & x)
    {
       case 2:
       {
-		 return  -6. *M_PI * cos(2.*M_PI * xi) 
-			    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
-				+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		  if(sol_opt == 0){
+				 return  -6. *M_PI * cos(2.*M_PI * xi) 
+					    +xi * 4. *M_PI*M_PI * sin(2.*M_PI * xi)
+						+xi * 4. *M_PI*M_PI * sin(2.*M_PI * yi);
+		  }
+		 else if( (sol_opt == 1) || (sol_opt == 2) ){
+			return -x(0);
+		  }
+		  else{
+			return 0.;
+		  }
          break;
       }
       case 3:
