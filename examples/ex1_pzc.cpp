@@ -57,6 +57,7 @@ using namespace mfem;
 
 double f_exact(const Vector &);
 double u_exact(const Vector &);
+double r_exact(const Vector &);
 
 const double alpha_pzc = 100.;
 

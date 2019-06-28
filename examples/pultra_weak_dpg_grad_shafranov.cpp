@@ -38,7 +38,6 @@ using namespace mfem;
 double f_exact(const Vector & x);
 double u_exact(const Vector & x);
 double r_exact(const Vector & x);
-double q_trace_exact(const Vector & x);
 void  zero_fun(const Vector & x, Vector & f);
 void  q_exact(const Vector & x, Vector & f);
 
@@ -289,7 +288,6 @@ int main(int argc, char *argv[])
    ConstantCoefficient one(1.0);          /* coefficients */
    VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
    VectorFunctionCoefficient q_coeff(dim, q_exact);          /* coefficients */
-   FunctionCoefficient q_trace_coeff( q_trace_exact ); /* coefficients */
    FunctionCoefficient f_coeff( f_exact );/* coefficients */
    FunctionCoefficient u_coeff( u_exact );/* coefficients */
 
@@ -640,15 +638,21 @@ int main(int argc, char *argv[])
 //	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
 //	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
 
-	   double u_error = u0.ComputeL2Error(u_coeff);
-	   double q_error = q0.ComputeL2Error(q_coeff);
+	   double u_l2_error = u0.ComputeL2Error(u_coeff);
+	   double q_l2_error = q0.ComputeL2Error(q_coeff);
+
+	   double u_max_error = u0.ComputeMaxError(u_coeff);
+	   double q_max_error = q0.ComputeMaxError(q_coeff);
 
 	   int global_ne = mesh->GetGlobalNE();
 	   if(myid == 0){
 			cout << "\nelement number of the mesh: "<< global_ne<<endl; 
 			cout<< "\n dimension: "<<dim<<endl;
-			printf("\n|| u_h - u ||_{L^2} = %e \n", u_error );
-			printf("\n|| q_h - q ||_{L^2} = %e \n", q_error );
+			printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
+			printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
+			cout<<endl;
+			printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
+			printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
 			cout<<endl;
 	   }
 	

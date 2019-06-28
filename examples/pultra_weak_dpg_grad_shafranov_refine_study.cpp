@@ -560,7 +560,7 @@ int main(int argc, char *argv[])
 		   CGSolver pcg(MPI_COMM_WORLD);
 		   pcg.SetOperator(A);
 		   pcg.SetPreconditioner(P);
-		   pcg.SetRelTol(1e-10);
+		   pcg.SetRelTol(1e-12);
 		   pcg.SetMaxIter(1000);
 		   pcg.SetPrintLevel(solver_print_opt);
 		   pcg.Mult(b,x);
@@ -678,16 +678,16 @@ int main(int argc, char *argv[])
 	   std::cout<< endl<<endl<<" original element number: "<< org_element_number<<endl<<endl;
 	   std::cout << "------------------------------------------------------------------------\n";
 	   std::cout <<
-	             "level  u_l2errors  order   q_max_errors  order    residual   order   \n";
+	             "level  u_maxerrors  order   q_maxerrors  order    residual   order   \n";
 	   std::cout << "----------------------------------------------------------------------------\n";
 	   for (int ref_levels = 0; ref_levels < total_refine_level; ref_levels++)
 	   {
 	      if (ref_levels == 0)
 	      {
 	         std::cout << "  " << ref_levels << "    "
-	                   << std::setprecision(2) << std::scientific << u_l2_error(ref_levels)
+	                   << std::setprecision(2) << std::scientific << u_max_error(ref_levels)
 	                   << "   " << " -       "
-	                   << std::setprecision(2) << std::scientific << q_l2_error(ref_levels)
+	                   << std::setprecision(2) << std::scientific << q_max_error(ref_levels)
 	                   << "    " << " -       "
 	                   << std::setprecision(2) << std::scientific << dual_norm_error(ref_levels)
 	                   << "    " << " -       "
@@ -695,7 +695,7 @@ int main(int argc, char *argv[])
 	      }
 	      else
 	      {
-	         double u_order     = log(u_l2_error(ref_levels)/u_l2_error(ref_levels-1))/log(
+	         double u_order     = log(u_max_error(ref_levels)/u_max_error(ref_levels-1))/log(
 	                                 0.5);
 	         double q_order     = log(q_max_error(ref_levels)/q_max_error(ref_levels-1))/log(
 	                                 0.5);
@@ -704,7 +704,7 @@ int main(int argc, char *argv[])
 	         double dual_order  = log(dual_norm_error(ref_levels)/dual_norm_error(ref_levels-1))/log(
 	                                 0.5);
 	         std::cout << "  " << ref_levels << "    "
-	                   << std::setprecision(2) << std::scientific << u_l2_error(ref_levels)
+	                   << std::setprecision(2) << std::scientific << u_max_error(ref_levels)
 	                   << "  " << std::setprecision(4) << std::fixed << u_order
 	                   << "    " << std::setprecision(2) << std::scientific << q_max_error(ref_levels)
 	                   << "   " << std::setprecision(4) << std::fixed << q_order
