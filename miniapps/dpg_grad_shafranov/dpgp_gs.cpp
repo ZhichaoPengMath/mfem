@@ -468,26 +468,7 @@ int main(int argc, char *argv[])
 	   InverseGram.SetBlock(1,1,matSinv);
 	
 	   Operator *A = new RAPOperator(B, InverseGram, B);
-	   RAPOperator A2(B, InverseGram, B);
 
-//	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
-//												vtest_space, stest_space,
-//												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
-//												matB_q_jump, matVinv, matSinv,
-//												offsets, offsets_test,
-//												A
-//			   );
-	   Operator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
-												vtest_space, stest_space,
-												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
-												matB_q_jump, matVinv, matSinv,
-												offsets, offsets_test,
-												A
-			   );
-
-//	   Operator * reduced_system_operator(A);
-//	   TestOperator * reduced_system_operator = new TestOperator(A2);
-	
 	/**************************************************/
 	
 	   /* calculate right hand side b = B^T InverseGram F */
@@ -599,6 +580,15 @@ int main(int argc, char *argv[])
 
 //	   Shatinv->SetPrintLevel(1);
 	
+	   /* 9b pass all the pointer to the infomration interfce */
+	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
+												vtest_space, stest_space,
+												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+												matB_q_jump, matVinv, matSinv,
+												matV0, AmatS0, Vhat, Shat, 
+												offsets, offsets_test,
+												A
+			   );
 
 //
 //	// 10. Solve the normal equation system using the PCG iterative solver.
@@ -607,15 +597,33 @@ int main(int argc, char *argv[])
 
 	   StopWatch timer;
 	   timer.Start();
-	   CGSolver pcg(MPI_COMM_WORLD);
-	   pcg.SetOperator(*reduced_system_operator);
-//	   pcg.SetOperator(*A);
-	   pcg.SetPreconditioner(P);
-	   pcg.SetRelTol(1e-9);
-	   pcg.SetMaxIter(1000);
-	   pcg.SetPrintLevel(solver_print_opt);
-	   pcg.Mult(b,x);
-	   MPI_Barrier(MPI_COMM_WORLD);
+//	   if(use_petsc){
+//	   if(!use_petsc){
+			CGSolver pcg(MPI_COMM_WORLD);
+	   		pcg.SetOperator(*reduced_system_operator);
+	   		pcg.SetPreconditioner(P);
+	   		pcg.SetRelTol(1e-9);
+	   		pcg.SetMaxIter(1000);
+	   		pcg.SetPrintLevel(solver_print_opt);
+	   		pcg.Mult(b,x);
+	   		MPI_Barrier(MPI_COMM_WORLD);
+//	   }
+//	   else{
+////		    PetscPCGSolver * pcg = new PetscPCGSolver(*reduced_system_operator);
+//		    PetscPreconditionerFactory *J_factory=NULL;
+//			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
+//
+//		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
+////		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
+////		    PetscLinearSolver * pcg = new PetscLinearSolver( MPI_COMM_WORLD );
+//		    pcg->SetOperator( *reduced_system_operator );
+//			pcg->SetPreconditionerFactory(J_factory);
+//		    pcg->SetTol(1e-9);
+//      	    pcg->SetAbsTol(1e-9);
+//      	    pcg->SetMaxIter(1000);
+//      	    pcg->SetPrintLevel(2);
+//		    pcg->Mult(b,x);
+//	   }
 	   timer.Stop();
 	   if(myid==0){
 			cout<<"time: "<<timer.RealTime()<<endl;
@@ -707,6 +715,8 @@ int main(int argc, char *argv[])
 	   }
 
 //   // 13. Free the used memory.
+	/* reduced system operator */
+   delete reduced_system_operator;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
