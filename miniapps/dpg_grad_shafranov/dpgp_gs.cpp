@@ -598,7 +598,7 @@ int main(int argc, char *argv[])
 	   StopWatch timer;
 	   timer.Start();
 //	   if(use_petsc){
-//	   if(!use_petsc){
+	   if(!use_petsc){
 			CGSolver pcg(MPI_COMM_WORLD);
 	   		pcg.SetOperator(*reduced_system_operator);
 	   		pcg.SetPreconditioner(P);
@@ -607,23 +607,21 @@ int main(int argc, char *argv[])
 	   		pcg.SetPrintLevel(solver_print_opt);
 	   		pcg.Mult(b,x);
 	   		MPI_Barrier(MPI_COMM_WORLD);
-//	   }
-//	   else{
-////		    PetscPCGSolver * pcg = new PetscPCGSolver(*reduced_system_operator);
-//		    PetscPreconditionerFactory *J_factory=NULL;
-//			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
-//
-//		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
-////		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
-////		    PetscLinearSolver * pcg = new PetscLinearSolver( MPI_COMM_WORLD );
-//		    pcg->SetOperator( *reduced_system_operator );
-//			pcg->SetPreconditionerFactory(J_factory);
-//		    pcg->SetTol(1e-9);
-//      	    pcg->SetAbsTol(1e-9);
-//      	    pcg->SetMaxIter(1000);
-//      	    pcg->SetPrintLevel(2);
-//		    pcg->Mult(b,x);
-//	   }
+	   }
+	   else{
+//		    PetscPCGSolver * pcg = new PetscPCGSolver(*reduced_system_operator);
+		    PetscPreconditionerFactory *J_factory=NULL;
+			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
+
+		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
+		    pcg->SetOperator( *reduced_system_operator );
+			pcg->SetPreconditionerFactory(J_factory);
+		    pcg->SetTol(1e-9);
+      	    pcg->SetAbsTol(1e-9);
+      	    pcg->SetMaxIter(1000);
+      	    pcg->SetPrintLevel(2);
+		    pcg->Mult(b,x);
+	   }
 	   timer.Stop();
 	   if(myid==0){
 			cout<<"time: "<<timer.RealTime()<<endl;
