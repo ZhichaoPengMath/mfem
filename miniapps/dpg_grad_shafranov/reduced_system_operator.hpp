@@ -93,11 +93,6 @@ public:
 
 };
 
-ReducedSystemOperator::~ ReducedSystemOperator()
-{
-	delete Jacobian;
-}
-
 ReducedSystemOperator::ReducedSystemOperator(
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
@@ -138,8 +133,13 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 	}
 
 	return *Jacobian;
-//	return *A;
 }
+
+ReducedSystemOperator::~ReducedSystemOperator(){
+	delete Jacobian;
+}
+
+
 
 /************************************************************/
 /************************************************************/
@@ -204,7 +204,7 @@ MyBlockSolver::MyBlockSolver(const OperatorHandle &oh) : Solver() {
    }
 }
 
-//   How to solve preconditioner
+// How to solve preconditioner
 void MyBlockSolver::Mult(const Vector &x, Vector &y) const
 {
    //Mat &mass = sub[0][2];
@@ -241,8 +241,8 @@ MyBlockSolver::~MyBlockSolver()
 }
 
 /*************************************************************************/
-//Auxiliary class to provide preconditioners for matrix-free methods 
-//Information interface to exchange information between Hypre and Petsc
+// Auxiliary class to provide preconditioners for matrix-free methods 
+// Information interface to exchange information between Hypre and Petsc
 class PreconditionerFactory : public PetscPreconditionerFactory
 {
 private:
@@ -256,4 +256,3 @@ public:
 
    virtual ~PreconditionerFactory() {};
 };
-/***********************************************************************/

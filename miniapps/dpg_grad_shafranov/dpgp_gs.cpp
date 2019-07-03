@@ -56,9 +56,14 @@ int main(int argc, char *argv[])
 
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
-   args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
+   args.AddOption(&visualization, "-vis", "--visualization", "-no_vis",
                   "--no-visualization",
                   "Enable or disable GLVis visualization.");
+
+   args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
+                  "--no petsc",
+                  "Enable petsc or not");
+
    args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
                   "--no-visualization-for-grad-term",
                   "Enable or disable GLVis visualization for grad term.");
@@ -80,6 +85,7 @@ int main(int argc, char *argv[])
 				  " use lower order h1 trace or not, 0 by default");
    args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
 				  " use lower order rt trace or not, 0 by default");
+
 
 
    args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
@@ -609,17 +615,17 @@ int main(int argc, char *argv[])
 	   		MPI_Barrier(MPI_COMM_WORLD);
 	   }
 	   else{
-//		    PetscPCGSolver * pcg = new PetscPCGSolver(*reduced_system_operator);
+//		    PetscPCGSolver * pcg = new PetscPCGSolver(MPI_COMM_WORLD);
 		    PetscPreconditionerFactory *J_factory=NULL;
 			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
 
 		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
 		    pcg->SetOperator( *reduced_system_operator );
 			pcg->SetPreconditionerFactory(J_factory);
-		    pcg->SetTol(1e-9);
-      	    pcg->SetAbsTol(1e-9);
-      	    pcg->SetMaxIter(1000);
-      	    pcg->SetPrintLevel(2);
+		    pcg->SetRelTol(1e-9);
+      	    pcg->SetAbsTol(0.);
+      	    pcg->SetMaxIter(25);
+      	    pcg->SetPrintLevel(1);
 		    pcg->Mult(b,x);
 	   }
 	   timer.Stop();
@@ -641,13 +647,6 @@ int main(int argc, char *argv[])
 	// 10b. error 
 	   u0.Distribute( x.GetBlock(u0_var) );
 	   q0.Distribute( x.GetBlock(q0_var) );
-
-	   Vector y1(x),y2(x),diff(x);
-	   A->Mult(x,y1);
-	   reduced_system_operator->Mult(x,y2);
-	   subtract(y1,y2,diff);
-	   double norm_diff = diff.Norml2();
-	   cout<<"difference: "<<norm_diff<<endl;
 
 //	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
 //	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
