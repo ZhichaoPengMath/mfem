@@ -1,34 +1,5 @@
-// Compile with: make ultra_weak_dpg
-//
-// Description:  This example code demonstrates the use of the Discontinuous
-//               Petrov-Galerkin (DPG) method in its ultra-weak form
-//						-\nabla \cdot ( 1/r \grad u)  = f with Dirichlet boundary condition
-//				 Rewrite the equation in its first order form
-//					  q + 1/r \grad u = 0
-//					  div(q) =  f
-//				 Variational form:
-//						 ( rq, \tau ) - (u, div(\tau) ) + \lgl \hat{u}, \tau\cdot n \rgl = 0
-//						-( q, \grad v) + \lgl \hat{q}, v \rgl  = f
-//				 here, \hat{q} \approx q\cdot n
-//				 Trial space:
-//					Interior terms:
-//						  q, u \in L^2
-//					Trace terms 
-//					      \hat{q} \in H^{-1/2} = trace of H(div)
-//					      \hat{u} \in H^{1/2}  = trace of H^1
-//
-//				 Check paper:
-//						"AN ANALYSIS OF THE PRACTICAL DPG METHOD", 
-//						J. GOPALAKRISHNAN AND W. QIU, 2014
-//				 for details
-//
-//               The example highlights the use of interfacial (trace) finite
-//               elements and spaces, trace face integrators and the definition
-//               of block operators and preconditioners.
-//
-//               We recommend viewing examples 1-5 before viewing this example.
-
 #include "mfem.hpp"
+#include "reduced_system_operator.hpp"
 #include <fstream>
 #include <iostream>
 
@@ -74,7 +45,15 @@ int main(int argc, char *argv[])
    int prec_amg = 1;
    double amg_perturbation = 1e-2;
 
+   bool use_petsc = true;
+
+   const char *petscrc_file = "";
+
    OptionsParser args(argc, argv);
+
+   args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
+                  "PetscOptions file to use.");
+
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
@@ -144,6 +123,9 @@ int main(int argc, char *argv[])
 		args.PrintOptions(cout);
    }
 
+
+   // 1b. We initialize PETSc
+   if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -485,8 +467,26 @@ int main(int argc, char *argv[])
 	   InverseGram.SetBlock(0,0,matVinv);
 	   InverseGram.SetBlock(1,1,matSinv);
 	
-	   RAPOperator A(B, InverseGram, B);
+	   Operator *A = new RAPOperator(B, InverseGram, B);
+	   RAPOperator A2(B, InverseGram, B);
 
+//	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
+//												vtest_space, stest_space,
+//												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+//												matB_q_jump, matVinv, matSinv,
+//												offsets, offsets_test,
+//												A
+//			   );
+	   Operator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
+												vtest_space, stest_space,
+												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+												matB_q_jump, matVinv, matSinv,
+												offsets, offsets_test,
+												A
+			   );
+
+//	   Operator * reduced_system_operator(A);
+//	   TestOperator * reduced_system_operator = new TestOperator(A2);
 	
 	/**************************************************/
 	
@@ -608,7 +608,8 @@ int main(int argc, char *argv[])
 	   StopWatch timer;
 	   timer.Start();
 	   CGSolver pcg(MPI_COMM_WORLD);
-	   pcg.SetOperator(A);
+	   pcg.SetOperator(*reduced_system_operator);
+//	   pcg.SetOperator(*A);
 	   pcg.SetPreconditioner(P);
 	   pcg.SetRelTol(1e-9);
 	   pcg.SetMaxIter(1000);
@@ -634,6 +635,13 @@ int main(int argc, char *argv[])
 	// 10b. error 
 	   u0.Distribute( x.GetBlock(u0_var) );
 	   q0.Distribute( x.GetBlock(q0_var) );
+
+	   Vector y1(x),y2(x),diff(x);
+	   A->Mult(x,y1);
+	   reduced_system_operator->Mult(x,y2);
+	   subtract(y1,y2,diff);
+	   double norm_diff = diff.Norml2();
+	   cout<<"difference: "<<norm_diff<<endl;
 
 //	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
 //	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );

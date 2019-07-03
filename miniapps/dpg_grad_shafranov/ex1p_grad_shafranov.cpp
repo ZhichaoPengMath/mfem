@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
    // 2. Parse command-line options.
-   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
+   const char *mesh_file = "../../data/inline-quad-pzc2.mesh";
    int order = 1;
    int ref_levels = -1;
    bool static_cond = false;
@@ -81,7 +81,12 @@ int main(int argc, char *argv[])
    const char *device = "cpu";
    bool visualization = true;
 
+   const char *petscrc_file = "";
+
    OptionsParser args(argc, argv);
+
+   args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
+                  "PetscOptions file to use.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree) or -1 for"
                   " isoparametric space.");
@@ -102,13 +107,13 @@ int main(int argc, char *argv[])
 				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
    args.Parse();
    if(sol_opt == 1){
-		mesh_file = "../data/cerfon_iter_quad.mesh";
+		mesh_file = "../../data/cerfon_iter_quad.mesh";
    }
    else if(sol_opt == 2){
-		mesh_file = "../data/cerfon_nstx_quad.mesh";
+		mesh_file = "../../data/cerfon_nstx_quad.mesh";
    }
    else{
-		mesh_file = "../data/inline-quad-pzc2.mesh";
+		mesh_file = "../../data/inline-quad-pzc2.mesh";
    }
 
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -126,6 +131,10 @@ int main(int argc, char *argv[])
    if(myid == 0){
 		args.PrintOptions(cout);
 	}
+
+   // 2b. We initialize PETSc
+   MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL);
+
    // 3. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
    //    the same code.
@@ -260,26 +269,50 @@ int main(int argc, char *argv[])
    if (static_cond) { a->EnableStaticCondensation(); }
    a->Assemble();
 
-   OperatorPtr A;
+//   OperatorPtr A;
+   HypreParMatrix A;
    Vector B, X;
    a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
-
-   cout << "Size of linear system: " << A->Height() << endl;
 
 
    // 11. Solve the linear system A X = B.
    //     * With full assembly, use the BoomerAMG preconditioner from hypre.
    //     * With partial assembly, use no preconditioner, for now.
-   Solver *prec = NULL;
-   if (!pa) { prec = new HypreBoomerAMG; }
-   CGSolver cg(MPI_COMM_WORLD);
-   cg.SetRelTol(1e-12);
-   cg.SetMaxIter(2000);
-   cg.SetPrintLevel(1);
-   if (prec) { cg.SetPreconditioner(*prec); }
-   cg.SetOperator(*A);
-   cg.Mult(B, X);
-   delete prec;
+   HypreSolver *amg = new HypreBoomerAMG(A);
+   if(false){
+       Solver *prec = NULL;
+       if (!pa) { prec = new HypreBoomerAMG; }
+       CGSolver cg(MPI_COMM_WORLD);
+       cg.SetRelTol(1e-12);
+       cg.SetMaxIter(2000);
+       cg.SetPrintLevel(1);
+       if (prec) { cg.SetPreconditioner(*prec); }
+       cg.SetOperator(A);
+       cg.Mult(B, X);
+       delete prec;
+   }
+   else{
+      bool wrap = !strlen(petscrc_file);
+
+      PetscPCGSolver *pcg = new PetscPCGSolver(MPI_COMM_WORLD);
+//      PetscPCGSolver *pcg = new PetscPCGSolver(A);
+	  pcg->SetOperator(A);
+
+      if (wrap)
+      {
+         pcg->SetPreconditioner(*amg);
+      }
+      pcg->SetTol(1e-12);
+      pcg->SetAbsTol(1e-12);
+      pcg->SetMaxIter(200);
+      pcg->SetPrintLevel(2);
+
+      pcg->iterative_mode = true;
+      X.Randomize();
+
+      pcg->Mult(B, X);
+
+   }
 
    // 12. Recover the solution as a finite element grid function.
    a->RecoverFEMSolution(X, *b, x);
@@ -396,6 +429,7 @@ int main(int argc, char *argv[])
    if (order > 0) { delete fec; }
    delete mesh;
 
+   MFEMFinalizePetsc();
    MPI_Finalize();
 
    return 0;
