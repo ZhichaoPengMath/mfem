@@ -607,6 +607,7 @@ int main(int argc, char *argv[])
 
 	   StopWatch timer;
 	   timer.Start();
+//	   GMRESSolver pcg(MPI_COMM_WORLD);
 	   CGSolver pcg(MPI_COMM_WORLD);
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);

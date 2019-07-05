@@ -627,7 +627,18 @@ int main(int argc, char *argv[])
       	    petsc_newton->SetAbsTol(0.);
       	    petsc_newton->SetMaxIter(25);
       	    petsc_newton->SetPrintLevel(1);
+
+			SNES pn_snes(*petsc_newton);
+			KSP pn_ksp; 
+			SNESGetKSP(pn_snes,&pn_ksp);
+			KSPSetType(pn_ksp,KSPCG);
+//			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
+			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
+
+
 		    petsc_newton->Mult(b,x);
+
+
 	   }
 	   timer.Stop();
 	   if(myid==0){

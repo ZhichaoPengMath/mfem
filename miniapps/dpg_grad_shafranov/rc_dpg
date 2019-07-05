@@ -1,9 +1,10 @@
 # matrix-free Jacobian action, preconditioner constructed using PetscPreconditionerFactory
-#-ksp_monitor
+-ksp_monitor
 #-ksp_view
 
-#-snes_view
+-snes_view
 -snes_monitor
+#-ksp_monitor
 #-snes_type qn
 #-snes_qn_powell_descent
 -snes_mf_operator
@@ -13,6 +14,8 @@
 #-snes_rtol 1e-5
 #
 #-snes_type ksponly
+
+#-snes_mf_ksp_monitor
 
 
 ########################
@@ -25,10 +28,13 @@
 #-s0_ksp_type minres
 #-s0_ksp_type gmres
 -s0_ksp_type cg
+#-s0_ksp_type preonly
 
 #-s0_ksp_view
 #-s0_ksp_converged_reason
 #-s0_ksp_monitor_true_residual
+
+
 ########################
 
 ########################
@@ -41,6 +47,7 @@
 #-s1_ksp_type minres
 #-s1_ksp_type gmres
 -s1_ksp_type cg
+#-s1_ksp_type preonly
 
 #-s1_ksp_view
 #-s1_ksp_converged_reason
@@ -53,10 +60,11 @@
 -s2_ksp_rtol 1e-3
 #-s2_ksp_atol 1e-6
 
-#-s2_ksp_max_it 300
+-s2_ksp_max_it 15
 
 
--s2_pc_type jacobi # good
+-s2_pc_type hypre
+#-s2_pc_type jacobi # good
 #-s2_pc_hypre_type ads
 #-s2_pc_hypre_type ams
 #-s2_pc_hypre_type amg
@@ -67,10 +75,11 @@
 #-s2_ksp_type gmres
 -s2_ksp_type cg
 #-s2_ksp_type minres
+#-s2_ksp_type preonly
 
 
-#-s2_ksp_view
 -s2_ksp_converged_reason
+#-s2_ksp_view
 #-s2_ksp_monitor
 ########################
 
@@ -85,6 +94,7 @@
 #-s3_ksp_type minres
 #-s3_ksp_type gmres
 -s3_ksp_type cg
+-s3_ksp_type preonly
 
 #-s3_ksp_view
 #-s3_ksp_converged_reason
