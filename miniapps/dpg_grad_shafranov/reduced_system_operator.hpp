@@ -132,6 +132,7 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 		Jacobian->SetBlock(3,3,matShat);
 	}
 
+//	return * A;
 	return *Jacobian;
 }
 
@@ -188,16 +189,24 @@ MyBlockSolver::MyBlockSolver(const OperatorHandle &oh) : Solver() {
    ierr=MatNestGetSubMats(P,&N,&M,&sub); PCHKERRQ(sub[0][0], ierr);// sub is an N by M array of matrices
    ierr=MatNestGetISs(P, index_set, NULL);  PCHKERRQ(index_set, ierr);// get the index sets of the blocks
 
+
    for (int i=0; i<4;i++)
    {
      ierr=KSPCreate(PETSC_COMM_WORLD, &kspblock[i]);    PCHKERRQ(kspblock[i], ierr);
+	 /*                    ksp         A          preconditioner     */
      ierr=KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]);PCHKERRQ(sub[i][i], ierr);
 
-     if (i==2){
+     if (i==0){
+         KSPAppendOptionsPrefix(kspblock[i],"s0_");
+	 }
+     else if(i==1){
          KSPAppendOptionsPrefix(kspblock[i],"s1_");
 	 }
-     else{
+     else if(i==2){
          KSPAppendOptionsPrefix(kspblock[i],"s2_");
+	 }
+     else{
+         KSPAppendOptionsPrefix(kspblock[i],"s3_");
 	 }
      KSPSetFromOptions(kspblock[i]);
      KSPSetUp(kspblock[i]);
@@ -213,7 +222,7 @@ void MyBlockSolver::Mult(const Vector &x, Vector &y) const
    X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
    Y->PlaceArray(y.GetData());
 
-   //solve the last two equations first
+   //solve equations
    for (int i = 0; i<4; i++)
    {
      VecGetSubVector(*X,index_set[i],&blockx);

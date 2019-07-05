@@ -43,7 +43,8 @@ int main(int argc, char *argv[])
    int user_pcg_prec_maxit = -1;
 
    int prec_amg = 1;
-   double amg_perturbation = 1e-2;
+   double amg_perturbation = 0.;
+//   double amg_perturbation = 1e-3;
 
    bool use_petsc = true;
 
@@ -527,7 +528,7 @@ int main(int argc, char *argv[])
 	   HypreParMatrix * matSjump = NULL;
 	   HypreParMatrix * Shat = NULL;
 	   if(prec_amg == 1){
-		    amg_perturbation = min(1e-2, amg_perturbation);
+		    amg_perturbation = min(1e-3, amg_perturbation);
 			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
 	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
 	   		Sjump->Assemble();
@@ -619,14 +620,14 @@ int main(int argc, char *argv[])
 		    PetscPreconditionerFactory *J_factory=NULL;
 			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
 
-		    PetscNonlinearSolver * pcg = new PetscNonlinearSolver( MPI_COMM_WORLD );
-		    pcg->SetOperator( *reduced_system_operator );
-			pcg->SetPreconditionerFactory(J_factory);
-		    pcg->SetRelTol(1e-9);
-      	    pcg->SetAbsTol(0.);
-      	    pcg->SetMaxIter(25);
-      	    pcg->SetPrintLevel(1);
-		    pcg->Mult(b,x);
+		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
+		    petsc_newton->SetOperator( *reduced_system_operator );
+			petsc_newton->SetPreconditionerFactory(J_factory);
+		    petsc_newton->SetRelTol(1e-9);
+      	    petsc_newton->SetAbsTol(0.);
+      	    petsc_newton->SetMaxIter(25);
+      	    petsc_newton->SetPrintLevel(1);
+		    petsc_newton->Mult(b,x);
 	   }
 	   timer.Stop();
 	   if(myid==0){
@@ -640,7 +641,7 @@ int main(int argc, char *argv[])
 	      InverseGram.Mult(LSres, tmp);
 		  double res = sqrt(InnerProduct(LSres,tmp) );
 		  if(myid == 0){
-			cout << "\n|| Bx - F ||_{S^-1} = " << res << endl;
+			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
 		  }
 	   }
 
