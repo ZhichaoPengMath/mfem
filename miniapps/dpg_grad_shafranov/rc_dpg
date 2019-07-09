@@ -5,18 +5,11 @@
 -snes_view
 -snes_monitor
 #-ksp_monitor
-#-snes_type qn
-#-snes_qn_powell_descent
+
 -snes_mf_operator
-#-snes_qn_type lbfgs
-#-snes_type newtonls
-#-snes_max_it 10
-#-snes_rtol 1e-5
-#
-#-snes_type ksponly
-
-#-snes_mf_ksp_monitor
-
+#-snes_type newtontr
+-snes_type newtonls
+#-snes_type nrichardson
 
 ########################
 #-s0_ksp_max_it 10

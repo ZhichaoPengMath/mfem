@@ -623,17 +623,31 @@ int main(int argc, char *argv[])
 		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
 		    petsc_newton->SetOperator( *reduced_system_operator );
 			petsc_newton->SetPreconditionerFactory(J_factory);
-		    petsc_newton->SetRelTol(1e-9);
+		    petsc_newton->SetRelTol(1e-8);
       	    petsc_newton->SetAbsTol(0.);
-      	    petsc_newton->SetMaxIter(25);
+      	    petsc_newton->SetMaxIter(250000);
+//      	    petsc_newton->SetMaxIter(250);
       	    petsc_newton->SetPrintLevel(1);
 
 			SNES pn_snes(*petsc_newton);
+//			SNESSetType(pn_snes,SNESQN);
+//			SNESSetType(pn_snes,SNESNCG);
+//			SNESSetType(pn_snes,SNESANDERSON);
+//			SNESSetType(pn_snes,SNESNRICHARDSON);
+
+//			SNESSetTolerances(SNES snes,PetscReal abstol,PetscReal rtol,PetscReal stol,PetscInt maxit,PetscInt maxf)
+//			SNESSetTolerances(pn_snes,PETSC_DEFAULT,1e-5,PETSC_DEFAULT,50000,50000);
+
+//			SNESLineSearch linesearch;
+//			SNESGetLineSearch(pn_snes, &linesearch);
+//			SNESLineSearchSetType(linesearch,SNESLINESEARCHL2);
+
 			KSP pn_ksp; 
 			SNESGetKSP(pn_snes,&pn_ksp);
 			KSPSetType(pn_ksp,KSPCG);
+
 //			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
-			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
+//			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
 
 
 		    petsc_newton->Mult(b,x);

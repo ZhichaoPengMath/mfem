@@ -1,0 +1,120 @@
+2019/07/09
+1 check the colouring for JFNK
+2 consider better preconditioner for [v\cdot n ] block
+3 write code for Nonlinear
+
+  3a:
+	J^T G^-1 ( B x  - f(x) ) = 0
+	x = [ q u qhat uhat ]^T
+
+    G=[ V^-1 0
+	    0    S^-1]
+
+	B=[ M   D1  0  T1
+	    D2  0   T2 0  ]
+    
+	f(x) = [ 0  F(u) ]^T
+
+	J= D(Bx-f(x) )/Dx
+
+	Df/Dx = [ 0  0     0  0
+	          0 F'(u)  0  0]
+    J = B - Df/Dx
+	  = [ M    D1     0   T1 
+	      D2  -F'(u)  T2  0  ]
+
+	F'(u) = DF
+
+	J^T G^-1 (Bx - f(x) ) = 0
+
+	J^T G^-1 B
+  = [ M^T    D2^T
+      D1^T  -DF^T    * [ V^-1M  V^-1D1 0      V^-1T1
+	  0      T2^T        S^-1D2 0      S^-1T2 0      ]
+	  T1^T   0]        
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 T2     M^T V ^-1 T1
+        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1T2     D1^TV^-1 T1
+		T2^TS^-1 D2                 0              T2^T S^-1 T2     0
+		T1^T V^-1 M                 T1^TV^-1D1     0                T1^TV^-1 T1    ]
+
+	
+	J^T G^-1 B x
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 T2     M^T V ^-1 T1       [ q 
+        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1T2     D1^TV^-1 T1      *   u
+		T2^TS^-1 D2                 0              T2^T S^-1 T2     0                    qhat
+		T1^T V^-1 M                 T1^TV^-1D1     0                T1^TV^-1 T1    ]     uhat ]
+
+  = [   (M^T V^-1 M + D2^T S^-1 D2) q + M^T V^-1D1 u  + D2^T S^-1T2 qhat + M^T V^-1T1 uhat
+        (D1^TV^-1 M - DFu^T S^-1 D2)q + D1^TV^-1D1 u  - DFu^TS^-1T2 qhat + D1^TV^-1T1 uhat  
+		 T2^TS^-1D2 q                                 + T2^TS^-1T2  qhat
+	     T1^TV^-1M  q                 + T1^TV^-1D1u                      +T1^TV^01T1  uhat
+
+
+    J^T G^-1 f(x)
+  = [ M^T   D2^T
+      D1^T -DF^T     * [V^-1   0      *   [ 0
+	  0     T2^T        0      S^-1]        Fu]
+	  T1^T  0   ]
+  = [ M^T V^-1      D2^T S^-1
+      D1^T V^-1    -DF^T S^-1     * [0
+	  0             T2^T S^-1        Fu]
+	  T1^T V^01     0         ]
+  = [ D2^T S^-1 Fu  
+     -DFu^T S^-1 Fu
+	  T2^T S^-1 Fu
+	  0             ]
+
+
+     J^T G^-1(Bx- f(x) ) 
+  = [   (M^T V^-1 M + D2^T S^-1 D2) q + (M^T V^-1D1 u - D2^T S^-1Fu)  + D2^T S^-1T2 qhat + M^T V^-1T1 uhat
+        (D1^TV^-1 M - DFu^T S^-1 D2)q + (D1^TV^-1D1 u + DFu^TS^-1Fu)  - DFu^TS^-1T2 qhat + D1^TV^-1T1 uhat  
+		 T2^TS^-1D2 q                 -  T2^T S^-1 Fu                 + T2^TS^-1T2  qhat
+	     T1^TV^-1M  q                 + T1^TV^-1D1u                                      +T1^TV^01T1  uhat
+
+
+
+ Jacobian of J^T G^-1( Bx - f(x) )
+          J = d(Bx-f(x) )
+          J1 =   J^T G^-1 J
+		  J2 =   dJ^T/dx G^-1 ( Bx-f(x) )
+
+	J1 
+  = J^T G^-1 J 
+  = [ M^T    D2^T
+      D1^T  -DF^T    * [ V^-1M   V^-1D1  0      V^-1T1
+	  0      T2^T        S^-1D2 -S^-1DF  S^-1T2 0      ]
+	  T1^T   0]        
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1 -D2^TS^-1DF    D2^T S^-1 T2     M^T V ^-1 T1
+        D1^TV^-1 M - DF^TS^-1 D2    D1^T V^-1 D1+DF^TS^-1DF   -DF^T S^-1T2      D1^TV^-1 T1
+		T2^TS^-1 D2                -T2^T S^-1DF                T2^T S^-1 T2     0
+		T1^T V^-1 M                 T1^TV^-1D1                 0                T1^TV^-1 T1    ]
+ 
+    J2  
+  = [   0                  0                      0                  0 
+        0      DDFu^T S^-1(-D2 q+Fu-T2qhat)       0                  0
+		0                  0                      0                  0 
+		0                  0                      0                  0   ]
+    
+  Calculating DDFu^T S^-1(-D2 q +Fu - T2qhat)
+
+  Dfu^T S^-1 v(i) = [ Dfu^T(i,:) S^-1 v ]
+
+  d( Dfu^T S^-1 v(i) )/du(j) = [ dDfu^T(i,:)/du(j) ] S^-1 v
+
+  DDFu^T S^-1(-D2 q + Fu - T2qhat)(i,j) = [ dDfu^T(i,:)/du(j) ] S^-1 (-D2 q + Fu -T2qhat)
+  DDFu^T S^-1(-D2 q + Fu - T2qhat)(:,j) = [ dDfu^T(:,:)/du(j) ] S^-1 (-D2 q + Fu -T2qhat)
+
+  Personally speaking, I think this structure is easy for Matlab, but bad for parallel 
+
+
+
+ 3b: plans
+	(i)  linear case rewrtie the JFNK solver in J^T G^-1 (Bx - f(x) ) form
+	(ii) Define DF
+	(iii) get ``Jacobian" or preconditioner
+
+
+
+
+
+
