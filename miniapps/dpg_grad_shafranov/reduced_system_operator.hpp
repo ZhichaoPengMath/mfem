@@ -64,7 +64,25 @@ private:
 	/**********************************
 	 * Operator A
 	 * ********************************/
-	Operator * A;
+	BlockOperator * A;
+	/*******************************
+	 * ``Right hand side"  is
+	 *		jacB^T * Ginv F
+	 * *****************************/
+	BlockOperator * jacB;
+	BlockOperator * Ginv;
+	Vector *b;
+	Vector &F;
+//	Operator * A;
+
+	/*********************************
+	 * linear operator for the right hand side
+	 *********************************/
+    ParLinearForm * f_div;	
+	/*******************************
+	 * essential vdof for boundary condition
+	 * *****************************/
+   const Array<int>& ess_trace_vdof_list;
 		
 
 	/***************************/
@@ -82,7 +100,14 @@ public:
 			/* preconditioner */
 			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 			Array<int> _offsets, Array<int> _offsets_test,
-			Operator* _A
+//			Operator* _A,
+			BlockOperator* _A,
+			BlockOperator* _jacB,
+			BlockOperator* _Ginv,
+			const Array<int> &_ess_trace_vdof_list,
+			Vector *_b,
+			Vector &_F,
+			ParLinearForm * _f_div
 			);
 	// Define FF(x) = 0 
 	virtual void Mult( const Vector &x, Vector &y) const;  
@@ -102,7 +127,14 @@ ReducedSystemOperator::ReducedSystemOperator(
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 	Array<int> _offsets, Array<int> _offsets_test,
-	Operator *_A
+//	Operator *_A,
+	BlockOperator *_A,
+	BlockOperator* _jacB,
+	BlockOperator* _Ginv,
+	const Array<int> &_ess_trace_vdof_list,
+	Vector *_b,
+	Vector &_F,
+	ParLinearForm * _f_div
 	):
 	Operator( _A->Width(), _A->Height() ), /* size of operator, important !!! */
 	u0_space(_u0_space), q0_space(_q0_space), uhat_space(_uhat_space), qhat_space(_qhat_space),
@@ -114,11 +146,31 @@ ReducedSystemOperator::ReducedSystemOperator(
 	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
 	offsets(_offsets), offsets_test(_offsets_test),
 	A(_A),
+	jacB(_jacB),
+	Ginv(_Ginv),
+	ess_trace_vdof_list(_ess_trace_vdof_list),
+	f_div(_f_div),
+	b(_b),
+	F(_F),
 	Jacobian(NULL){}
 
 void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
 	A->Mult(x,y);
+//	y-=*b;
+
+   /* deal with boundary conditions */
+   Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+   f_div->ParallelAssemble( F1 );
+
+   BlockVector rhs(offsets); 
+   rhs=0.;
+
+   BlockVector IGF(offsets_test);
+   Ginv->Mult(F,IGF);
+   jacB->MultTranspose(IGF,rhs);
+
+   y-=rhs;
 }
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
@@ -132,8 +184,8 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 		Jacobian->SetBlock(3,3,matShat);
 	}
 
-//	return * A;
-	return *Jacobian;
+	return * A;
+//	return *Jacobian;
 }
 
 ReducedSystemOperator::~ReducedSystemOperator(){

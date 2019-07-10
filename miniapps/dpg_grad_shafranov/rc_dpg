@@ -1,10 +1,8 @@
 # matrix-free Jacobian action, preconditioner constructed using PetscPreconditionerFactory
--ksp_monitor
-#-ksp_view
 
 -snes_view
 -snes_monitor
-#-ksp_monitor
+-ksp_monitor
 
 -snes_mf_operator
 #-snes_type newtontr
@@ -12,8 +10,10 @@
 #-snes_type nrichardson
 
 ########################
-#-s0_ksp_max_it 10
--s0_pc_type hypre
+-s0_ksp_max_it 10
+#-s0_pc_type gamg
+-s0_pc_type hypre # slightly better
+#-s0_pc_type mg
 
 -s0_ksp_rtol 1e-3
 #-s0_ksp_atol 1e-6
@@ -32,7 +32,9 @@
 
 ########################
 -s1_ksp_max_it 10
--s1_pc_type hypre
+
+-s1_pc_type hypre #better
+#-s1_pc_type mg
 
 -s1_ksp_rtol 1e-3
 #-s1_ksp_atol 1e-6
@@ -55,13 +57,36 @@
 
 -s2_ksp_max_it 15
 
+-s2_pc_type gamg # best so far
 
--s2_pc_type hypre
-#-s2_pc_type jacobi # good
-#-s2_pc_hypre_type ads
-#-s2_pc_hypre_type ams
-#-s2_pc_hypre_type amg
-#-s2_pc_hypre_type mg
+#-s2_pc_gamg_square_graph 2
+
+
+#-s2_pc_gamg_reuse_interpolation
+#-s2_pc_mg_levels 2
+#-s2_pc_mg_cycles w
+
+#-s2_pc_gamg_type classical
+#-s2_pc_gamg_type agg
+#-s2_pc_gamg_agg_nsmooths 1
+#-s2_pc_gamg_agg_nsmooths 1
+
+
+#-s2_pc_type mg # good 1
+#-s2_pc_mg_galerkin
+#-s2_pc_mg_cycles w # bad with sol_opt 1 -o 1 -r 5
+
+#-s2_pc_type sor # good 2
+#-s2_pc_type eisenstat # good 2
+#-s2_pc_type jacobi # good 2
+#-s2_pc_type bjacobi # not cool
+#-s2_pc_type asm # diverge
+
+
+#-s2_pc_type hypre #good 2
+#-s2_pc_hypre_type boomeramg
+#-s2_pc_hypre_type ams # not easy to use
+#-s2_pc_hypre_type ads # not easy to use
 
 #-s2_pc_type asm # additive Schwartz, bad
 
@@ -71,7 +96,7 @@
 #-s2_ksp_type preonly
 
 
--s2_ksp_converged_reason
+#-s2_ksp_converged_reason
 #-s2_ksp_view
 #-s2_ksp_monitor
 ########################
@@ -79,7 +104,8 @@
 
 ########################
 #-s3_ksp_max_it 10
--s3_pc_type hypre
+-s3_pc_type hypre # better 
+#-s3_pc_type mg # much worse
 
 -s3_ksp_rtol 1e-3
 #-s3_ksp_atol 1e-6

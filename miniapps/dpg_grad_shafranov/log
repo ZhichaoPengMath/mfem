@@ -10,8 +10,8 @@
     G=[ V^-1 0
 	    0    S^-1]
 
-	B=[ M   D1  0  T1
-	    D2  0   T2 0  ]
+	B=[ M   D1  0  TU
+	    D2  0   TQ 0  ]
     
 	f(x) = [ 0  F(u) ]^T
 
@@ -20,8 +20,8 @@
 	Df/Dx = [ 0  0     0  0
 	          0 F'(u)  0  0]
     J = B - Df/Dx
-	  = [ M    D1     0   T1 
-	      D2  -F'(u)  T2  0  ]
+	  = [ M    D1     0   TU 
+	      D2  -F'(u)  TQ  0  ]
 
 	F'(u) = DF
 
@@ -29,47 +29,47 @@
 
 	J^T G^-1 B
   = [ M^T    D2^T
-      D1^T  -DF^T    * [ V^-1M  V^-1D1 0      V^-1T1
-	  0      T2^T        S^-1D2 0      S^-1T2 0      ]
-	  T1^T   0]        
-  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 T2     M^T V ^-1 T1
-        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1T2     D1^TV^-1 T1
-		T2^TS^-1 D2                 0              T2^T S^-1 T2     0
-		T1^T V^-1 M                 T1^TV^-1D1     0                T1^TV^-1 T1    ]
+      D1^T  -DF^T    * [ V^-1M  V^-1D1 0      V^-1TU
+	  0      TQ^T        S^-1D2 0      S^-1TQ 0      ]
+	  TU^T   0]        
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 TQ     M^T V ^-1 TU
+        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1TQ     D1^TV^-1 TU
+		TQ^TS^-1 D2                 0              TQ^T S^-1 TQ     0
+		TU^T V^-1 M                 TU^TV^-1D1     0                TU^TV^-1 TU    ]
 
 	
 	J^T G^-1 B x
-  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 T2     M^T V ^-1 T1       [ q 
-        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1T2     D1^TV^-1 T1      *   u
-		T2^TS^-1 D2                 0              T2^T S^-1 T2     0                    qhat
-		T1^T V^-1 M                 T1^TV^-1D1     0                T1^TV^-1 T1    ]     uhat ]
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1    D2^T S^-1 TQ     M^T V ^-1 TU       [ q 
+        D1^TV^-1 M - DF^TS^-1 D2    D1^TV^-1D1     -DF^T S^-1TQ     D1^TV^-1 TU      *   u
+		TQ^TS^-1 D2                 0              TQ^T S^-1 TQ     0                    qhat
+		TU^T V^-1 M                 TU^TV^-1D1     0                TU^TV^-1 TU    ]     uhat ]
 
-  = [   (M^T V^-1 M + D2^T S^-1 D2) q + M^T V^-1D1 u  + D2^T S^-1T2 qhat + M^T V^-1T1 uhat
-        (D1^TV^-1 M - DFu^T S^-1 D2)q + D1^TV^-1D1 u  - DFu^TS^-1T2 qhat + D1^TV^-1T1 uhat  
-		 T2^TS^-1D2 q                                 + T2^TS^-1T2  qhat
-	     T1^TV^-1M  q                 + T1^TV^-1D1u                      +T1^TV^01T1  uhat
+  = [   (M^T V^-1 M + D2^T S^-1 D2) q + M^T V^-1D1 u  + D2^T S^-1TQ qhat + M^T V^-1TU uhat
+        (D1^TV^-1 M - DFu^T S^-1 D2)q + D1^TV^-1D1 u  - DFu^TS^-1TQ qhat + D1^TV^-1TU uhat  
+		 TQ^TS^-1D2 q                                 + TQ^TS^-1TQ  qhat
+	     TU^TV^-1M  q                 + TU^TV^-1D1u                      +TU^TV^01TU  uhat
 
 
     J^T G^-1 f(x)
   = [ M^T   D2^T
       D1^T -DF^T     * [V^-1   0      *   [ 0
-	  0     T2^T        0      S^-1]        Fu]
-	  T1^T  0   ]
+	  0     TQ^T        0      S^-1]        Fu]
+	  TU^T  0   ]
   = [ M^T V^-1      D2^T S^-1
       D1^T V^-1    -DF^T S^-1     * [0
-	  0             T2^T S^-1        Fu]
-	  T1^T V^01     0         ]
+	  0             TQ^T S^-1        Fu]
+	  TU^T V^01     0         ]
   = [ D2^T S^-1 Fu  
      -DFu^T S^-1 Fu
-	  T2^T S^-1 Fu
+	  TQ^T S^-1 Fu
 	  0             ]
 
 
      J^T G^-1(Bx- f(x) ) 
-  = [   (M^T V^-1 M + D2^T S^-1 D2) q + (M^T V^-1D1 u - D2^T S^-1Fu)  + D2^T S^-1T2 qhat + M^T V^-1T1 uhat
-        (D1^TV^-1 M - DFu^T S^-1 D2)q + (D1^TV^-1D1 u + DFu^TS^-1Fu)  - DFu^TS^-1T2 qhat + D1^TV^-1T1 uhat  
-		 T2^TS^-1D2 q                 -  T2^T S^-1 Fu                 + T2^TS^-1T2  qhat
-	     T1^TV^-1M  q                 + T1^TV^-1D1u                                      +T1^TV^01T1  uhat
+  = [   (M^T V^-1 M + D2^T S^-1 D2) q + (M^T V^-1D1 u - D2^T S^-1Fu)  + D2^T S^-1TQ qhat + M^T V^-1TU uhat
+        (D1^TV^-1 M - DFu^T S^-1 D2)q + (D1^TV^-1D1 u + DFu^TS^-1Fu)  - DFu^TS^-1TQ qhat + D1^TV^-1TU uhat  
+		 TQ^TS^-1D2 q                 -  TQ^T S^-1 Fu                 + TQ^TS^-1TQ  qhat
+	     TU^TV^-1M  q                 + TU^TV^-1D1u                                      +TU^TV^01TU  uhat
 
 
 
@@ -81,28 +81,28 @@
 	J1 
   = J^T G^-1 J 
   = [ M^T    D2^T
-      D1^T  -DF^T    * [ V^-1M   V^-1D1  0      V^-1T1
-	  0      T2^T        S^-1D2 -S^-1DF  S^-1T2 0      ]
-	  T1^T   0]        
-  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1 -D2^TS^-1DF    D2^T S^-1 T2     M^T V ^-1 T1
-        D1^TV^-1 M - DF^TS^-1 D2    D1^T V^-1 D1+DF^TS^-1DF   -DF^T S^-1T2      D1^TV^-1 T1
-		T2^TS^-1 D2                -T2^T S^-1DF                T2^T S^-1 T2     0
-		T1^T V^-1 M                 T1^TV^-1D1                 0                T1^TV^-1 T1    ]
+      D1^T  -DF^T    * [ V^-1M   V^-1D1  0      V^-1TU
+	  0      TQ^T        S^-1D2 -S^-1DF  S^-1TQ 0      ]
+	  TU^T   0]        
+  = [   M^T v^-1 M + D2^T S^-1D2    M^T V^-1 D1 -D2^TS^-1DF    D2^T S^-1 TQ     M^T V ^-1 TU
+        D1^TV^-1 M - DF^TS^-1 D2    D1^T V^-1 D1+DF^TS^-1DF   -DF^T S^-1TQ      D1^TV^-1 TU
+		TQ^TS^-1 D2                -TQ^T S^-1DF                TQ^T S^-1 TQ     0
+		TU^T V^-1 M                 TU^TV^-1D1                 0                TU^TV^-1 TU    ]
  
     J2  
   = [   0                  0                      0                  0 
-        0      DDFu^T S^-1(-D2 q+Fu-T2qhat)       0                  0
+        0      DDFu^T S^-1(-D2 q+Fu-TQqhat)       0                  0
 		0                  0                      0                  0 
 		0                  0                      0                  0   ]
     
-  Calculating DDFu^T S^-1(-D2 q +Fu - T2qhat)
+  Calculating DDFu^T S^-1(-D2 q +Fu - TQqhat)
 
   Dfu^T S^-1 v(i) = [ Dfu^T(i,:) S^-1 v ]
 
   d( Dfu^T S^-1 v(i) )/du(j) = [ dDfu^T(i,:)/du(j) ] S^-1 v
 
-  DDFu^T S^-1(-D2 q + Fu - T2qhat)(i,j) = [ dDfu^T(i,:)/du(j) ] S^-1 (-D2 q + Fu -T2qhat)
-  DDFu^T S^-1(-D2 q + Fu - T2qhat)(:,j) = [ dDfu^T(:,:)/du(j) ] S^-1 (-D2 q + Fu -T2qhat)
+  DDFu^T S^-1(-D2 q + Fu - TQqhat)(i,j) = [ dDfu^T(i,:)/du(j) ] S^-1 (-D2 q + Fu -TQqhat)
+  DDFu^T S^-1(-D2 q + Fu - TQqhat)(:,j) = [ dDfu^T(:,:)/du(j) ] S^-1 (-D2 q + Fu -TQqhat)
 
   Personally speaking, I think this structure is easy for Matlab, but bad for parallel 
 
@@ -114,7 +114,4 @@
 	(iii) get ``Jacobian" or preconditioner
 
 
-
-
-
-
+Questions: How to use Hypre AMS and ADS in petsc?

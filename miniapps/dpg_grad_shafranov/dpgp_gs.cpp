@@ -43,10 +43,10 @@ int main(int argc, char *argv[])
    int user_pcg_prec_maxit = -1;
 
    int prec_amg = 1;
-   double amg_perturbation = 0.;
-//   double amg_perturbation = 1e-3;
+   double amg_perturbation = 1e-3;
 
    bool use_petsc = true;
+   bool use_factory = true;
 
    const char *petscrc_file = "";
 
@@ -64,6 +64,10 @@ int main(int argc, char *argv[])
    args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
                   "--no petsc",
                   "Enable petsc or not");
+
+   args.AddOption(&use_factory, "-no_fd", "--no_fd", "-fd",
+                  "--fd",
+                  "Enable fd or not");
 
    args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
                   "--no-visualization-for-grad-term",
@@ -133,6 +137,8 @@ int main(int argc, char *argv[])
 
    // 1b. We initialize PETSc
    if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
+
+   if (use_petsc) { amg_perturbation = 0.; }
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -296,7 +302,6 @@ int main(int argc, char *argv[])
 //   f_div->Update(stest_space, F.GetBlock(1) ,0);
    f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
    f_div->Assemble();
-   f_div->ParallelAssemble( F.GetBlock(1) );
 
 
    // 6. Deal with boundary conditions
@@ -304,16 +309,16 @@ int main(int argc, char *argv[])
    Array<int> ess_bdr(mesh->bdr_attributes.Max());
    ess_bdr = 1;
 
-   Array<int> ess_trace_dof_list;/* store the location (index) of  boundary element  */
-   Array<int> ess_trace_dof_list2;
-   uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_dof_list);
-   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_dof_list2);
+   Array<int> ess_trace_vdof_list;/* store the location (index) of  boundary element  */
+   Array<int> ess_trace_tdof_list;
+   uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
+   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_tdof_list);
 
 //   if(myid == 0){
 //	  cout<<endl<<endl<<"Boundary information: "<<endl;
 // 	  cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
-// 	  cout<<" number of essential  v_dofs "<<ess_trace_dof_list.Size()<<endl;
-// 	  cout<<" number of essential  true_dofs "<<ess_trace_dof_list2.Size()<<endl;
+// 	  cout<<" number of essential  v_dofs "<<ess_trace_vdof_list.Size()<<endl;
+// 	  cout<<" number of essential  true_dofs "<<ess_trace_tdof_list.Size()<<endl;
 //  }
 
 
@@ -358,7 +363,7 @@ int main(int argc, char *argv[])
    ParMixedBilinearForm *B_u_normal_jump = new ParMixedBilinearForm(uhat_space, vtest_space);
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
-   B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_dof_list, uhat, F);
+   B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
 //   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
 
@@ -455,35 +460,69 @@ int main(int argc, char *argv[])
 
 
 	/************************************************/
-
    // 8. Set up the 1x2 block Least Squares DPG operator, 
    //    the normal equation operator, A = B^t InverseGram B, and
    //    the normal equation right-hand-size, b = B^t InverseGram F.
    //
    //    B = mass_q     -u_dot_div 0        u_normal_jump
    //        q_weak_div  0         q_jump   0
-	   BlockOperator B(offsets_test, offsets);
-	   B.SetBlock(0, q0_var  ,matB_mass_q);
-	   B.SetBlock(0, u0_var  ,matB_u_dot_div);
-	   B.SetBlock(0, uhat_var,matB_u_normal_jump);
+   /********************************************************/
+   //8. Calculate blocks myself
+	/* off diagonal block */
+    HypreParMatrix *matA01 = RAP(matB_mass_q,matVinv, matB_u_dot_div);
+    HypreParMatrix *matA02 = RAP(matB_q_weak_div, matSinv, matB_q_jump);
+    HypreParMatrix *matA03 = RAP(matB_mass_q,matVinv, matB_u_normal_jump);
+     
+    HypreParMatrix *matA13 = RAP(matB_u_dot_div, matVinv, matB_u_normal_jump);
+   /* diagonal block */
+	HypreParMatrix * matA00  = RAP(matB_mass_q, matVinv, matB_mass_q);
+	matA00->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
 	
-	   B.SetBlock(1, q0_var   ,matB_q_weak_div);
-	   B.SetBlock(1, qhat_var ,matB_q_jump);
+	HypreParMatrix * matA11 = RAP( matVinv, matB_u_dot_div);
 	
-	   BlockOperator InverseGram(offsets_test, offsets_test);
-	   InverseGram.SetBlock(0,0,matVinv);
-	   InverseGram.SetBlock(1,1,matSinv);
+	HypreParMatrix * matA22 = RAP( matSinv, matB_q_jump);
+
+	HypreParMatrix * matA33 = RAP( matVinv, matB_u_normal_jump);
+
+	BlockOperator B(offsets_test, offsets);
+	B.SetBlock(0, q0_var  ,matB_mass_q);
+	B.SetBlock(0, u0_var  ,matB_u_dot_div);
+	B.SetBlock(0, uhat_var,matB_u_normal_jump);
 	
-	   Operator *A = new RAPOperator(B, InverseGram, B);
+	B.SetBlock(1, q0_var   ,matB_q_weak_div);
+	B.SetBlock(1, qhat_var ,matB_q_jump);
+	
+	BlockOperator InverseGram(offsets_test, offsets_test);
+	InverseGram.SetBlock(0,0,matVinv);
+	InverseGram.SetBlock(1,1,matSinv);
+	
+	BlockOperator *A = new BlockOperator(offsets,offsets);
+	/* diagonal */
+	A->SetBlock(0,0,matA00);
+	A->SetBlock(1,1,matA11);
+	A->SetBlock(2,2,matA22);
+	A->SetBlock(3,3,matA33);
+
+	/* offdiagonal */
+	A->SetBlock(0,1,matA01);
+	A->SetBlock(1,0,matA01->Transpose() );
+	A->SetBlock(0,2,matA02);
+	A->SetBlock(2,0,matA02->Transpose() );
+	A->SetBlock(0,3,matA03);
+	A->SetBlock(3,0,matA03->Transpose() );
+
+	A->SetBlock(1,3,matA13);
+	A->SetBlock(3,1,matA13->Transpose() );
 
 	/**************************************************/
-	
-	   /* calculate right hand side b = B^T InverseGram F */
-	   {
-		    BlockVector IGF(offsets_test);
-			InverseGram.Mult(F,IGF);
-			B.MultTranspose(IGF,b);
-	   }
+	/* calculate right hand side b = B^T G^-1 F */
+	if(!use_petsc)
+	{
+	    f_div->ParallelAssemble( F.GetBlock(1) );
+	    BlockVector IGF(offsets_test);
+	 	InverseGram.Mult(F,IGF);
+	 	B.MultTranspose(IGF,b);
+	}
 	    
 	   // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
 	   //   We use the "Jacobian" preconditionner
@@ -594,7 +633,13 @@ int main(int argc, char *argv[])
 												matB_q_jump, matVinv, matSinv,
 												matV0, AmatS0, Vhat, Shat, 
 												offsets, offsets_test,
-												A
+												A,
+												&B,
+												&InverseGram,
+												ess_trace_vdof_list,
+												&b,
+												F,
+												f_div
 			   );
 
 //
@@ -607,7 +652,8 @@ int main(int argc, char *argv[])
 //	   if(use_petsc){
 	   if(!use_petsc){
 			CGSolver pcg(MPI_COMM_WORLD);
-	   		pcg.SetOperator(*reduced_system_operator);
+	   		pcg.SetOperator(*A);
+//	   		pcg.SetOperator(*reduced_system_operator);
 	   		pcg.SetPreconditioner(P);
 	   		pcg.SetRelTol(1e-9);
 	   		pcg.SetMaxIter(1000);
@@ -622,17 +668,15 @@ int main(int argc, char *argv[])
 
 		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
 		    petsc_newton->SetOperator( *reduced_system_operator );
-		//	petsc_newton->SetPreconditionerFactory(J_factory);
-		    petsc_newton->SetRelTol(1e-8);
+			if(use_factory){
+				petsc_newton->SetPreconditionerFactory(J_factory);
+			}
+		    petsc_newton->SetRelTol(1e-9);
       	    petsc_newton->SetAbsTol(0.);
       	    petsc_newton->SetMaxIter(250000);
-//      	    petsc_newton->SetMaxIter(250);
       	    petsc_newton->SetPrintLevel(1);
 
 			SNES pn_snes(*petsc_newton);
-//			SNESSetType(pn_snes,SNESQN);
-//			SNESSetType(pn_snes,SNESNCG);
-//			SNESSetType(pn_snes,SNESANDERSON);
 //			SNESSetType(pn_snes,SNESNRICHARDSON);
 
 //			SNESSetTolerances(SNES snes,PetscReal abstol,PetscReal rtol,PetscReal stol,PetscInt maxit,PetscInt maxf)
@@ -646,16 +690,18 @@ int main(int argc, char *argv[])
 			SNESGetKSP(pn_snes,&pn_ksp);
 			KSPSetType(pn_ksp,KSPCG);
 
-			PC pn_pc;
-			KSPGetPC(pn_ksp,&pn_pc);
-			PCSetType(pn_pc,PCJACOBI);
+//			PC pn_pc;
+//			KSPGetPC(pn_ksp,&pn_pc);
+//			PCSetType(pn_pc,PCJACOBI);
 
 //			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
 //			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
 
 
-		    petsc_newton->Mult(b,x);
+//		    petsc_newton->Mult(b,x);
 
+			Vector bb;
+		    petsc_newton->Mult(bb,x);
 
 	   }
 	   timer.Stop();
