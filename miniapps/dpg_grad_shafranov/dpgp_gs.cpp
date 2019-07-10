@@ -622,7 +622,7 @@ int main(int argc, char *argv[])
 
 		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
 		    petsc_newton->SetOperator( *reduced_system_operator );
-			petsc_newton->SetPreconditionerFactory(J_factory);
+		//	petsc_newton->SetPreconditionerFactory(J_factory);
 		    petsc_newton->SetRelTol(1e-8);
       	    petsc_newton->SetAbsTol(0.);
       	    petsc_newton->SetMaxIter(250000);
@@ -645,6 +645,10 @@ int main(int argc, char *argv[])
 			KSP pn_ksp; 
 			SNESGetKSP(pn_snes,&pn_ksp);
 			KSPSetType(pn_ksp,KSPCG);
+
+			PC pn_pc;
+			KSPGetPC(pn_ksp,&pn_pc);
+			PCSetType(pn_pc,PCJACOBI);
 
 //			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
 //			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
