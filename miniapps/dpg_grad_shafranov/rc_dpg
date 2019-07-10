@@ -63,6 +63,8 @@
 
 
 -s2_pc_type sor # perform better for sol_opt 0
+			    # in parallel this is block jacobian with sor on each block
+#-s2_pc_sor_symmetric
 #-s2_pc_type eisenstat # good 2
 #-s2_pc_type jacobi # good 2
 #-s2_pc_type bjacobi # not cool
@@ -103,7 +105,7 @@
 
 
 #-s2_ksp_converged_reason
-#-s2_ksp_view
+-s2_ksp_view
 #-s2_ksp_monitor
 ########################
 
