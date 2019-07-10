@@ -3,19 +3,23 @@
 -snes_view
 -snes_monitor
 -ksp_monitor
+-ksp_view
+
+#-ksp_rtol 1e-20
 
 -snes_mf_operator
 #-snes_type newtontr
 -snes_type newtonls
 #-snes_type nrichardson
 
+#-snes_rtol 1e-20
 ########################
 -s0_ksp_max_it 10
 #-s0_pc_type gamg
 -s0_pc_type hypre # slightly better
 #-s0_pc_type mg
 
--s0_ksp_rtol 1e-3
+#-s0_ksp_rtol 1e-3
 #-s0_ksp_atol 1e-6
 
 #-s0_ksp_type minres
@@ -57,10 +61,17 @@
 
 -s2_ksp_max_it 15
 
--s2_pc_type gamg # best so far
+
+-s2_pc_type sor # perform better for sol_opt 0
+#-s2_pc_type eisenstat # good 2
+#-s2_pc_type jacobi # good 2
+#-s2_pc_type bjacobi # not cool
+#-s2_pc_type asm # diverge
+
+
+#-s2_pc_type gamg # perform good for sol_opt 1 and sol_opt 2, but not converge on very refined mesh
 
 #-s2_pc_gamg_square_graph 2
-
 
 #-s2_pc_gamg_reuse_interpolation
 #-s2_pc_mg_levels 2
@@ -76,11 +87,6 @@
 #-s2_pc_mg_galerkin
 #-s2_pc_mg_cycles w # bad with sol_opt 1 -o 1 -r 5
 
-#-s2_pc_type sor # good 2
-#-s2_pc_type eisenstat # good 2
-#-s2_pc_type jacobi # good 2
-#-s2_pc_type bjacobi # not cool
-#-s2_pc_type asm # diverge
 
 
 #-s2_pc_type hypre #good 2

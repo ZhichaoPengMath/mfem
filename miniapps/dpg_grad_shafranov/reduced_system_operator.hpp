@@ -184,8 +184,8 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 		Jacobian->SetBlock(3,3,matShat);
 	}
 
-	return * A;
 //	return *Jacobian;
+	return * A;
 }
 
 ReducedSystemOperator::~ReducedSystemOperator(){

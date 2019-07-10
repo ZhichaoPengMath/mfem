@@ -672,9 +672,9 @@ int main(int argc, char *argv[])
 				petsc_newton->SetPreconditionerFactory(J_factory);
 			}
 		    petsc_newton->SetRelTol(1e-9);
-      	    petsc_newton->SetAbsTol(0.);
-      	    petsc_newton->SetMaxIter(250000);
-      	    petsc_newton->SetPrintLevel(1);
+		   	petsc_newton->SetAbsTol(0.);
+			petsc_newton->SetMaxIter(250000);
+			petsc_newton->SetPrintLevel(1);
 
 			SNES pn_snes(*petsc_newton);
 //			SNESSetType(pn_snes,SNESNRICHARDSON);
