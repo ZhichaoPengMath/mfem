@@ -12,7 +12,9 @@
 -snes_type newtonls
 #-snes_type nrichardson
 
+
 #-snes_ksp_ew_conv  # a flag for inexact newton
+
 #-snes_rtol 1e-20
 ########################
 -s0_ksp_max_it 10
@@ -63,7 +65,7 @@
 -s2_ksp_max_it 15
 
 
--s2_pc_type sor # perform better for sol_opt 0
+#-s2_pc_type sor # perform better for sol_opt 0
 			    # in parallel this is block jacobian with sor on each block
 #-s2_pc_sor_symmetric
 #-s2_pc_type eisenstat # good 2
@@ -92,8 +94,19 @@
 
 
 
-#-s2_pc_type hypre #good 2
-#-s2_pc_hypre_type boomeramg
+-s2_pc_type hypre #good 2
+-s2_pc_hypre_type boomeramg
+
+-s2_pc_hypre_boomeramg_truncfactor 0.5 # larger for speed, smaller for accuracy
+-s2_pc_hypre_boomeramg_P_max 2 # make things faster
+-s2_pc_hypre_boomeramg_interp_type ext+i
+#-s2_pc_hypre_boomeramg_coarsen_type HMIS # HMIS # PMIS # Falgout default one
+
+#-s2_pc_hypre_boomeramg_agg_nl 0 # larger for speed, smaller for convergence
+#-s2_pc_hypre_boomeramg_agg_num_paths 3 # larger for convergence, smaller for one step solve
+#-s2_pc_hypre_boomeramg_agg_nl 1 # slow convergence, fast one step solve, over all not good for refined mesh but good for coarse mesh
+#-s2_pc_hypre_boomeramg_stong_threshold 0.7
+
 #-s2_pc_hypre_type ams # not easy to use
 #-s2_pc_hypre_type ads # not easy to use
 
@@ -105,7 +118,7 @@
 #-s2_ksp_type preonly
 
 
-#-s2_ksp_converged_reason
+-s2_ksp_converged_reason
 #-s2_ksp_view
 #-s2_ksp_monitor
 ########################

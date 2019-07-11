@@ -48,6 +48,8 @@ int main(int argc, char *argv[])
    bool use_petsc = true;
    bool use_factory = true;
 
+   bool vhat_amg = false;
+
    const char *petscrc_file = "";
 
    OptionsParser args(argc, argv);
@@ -68,6 +70,10 @@ int main(int argc, char *argv[])
    args.AddOption(&use_factory, "-no_fd", "--no_fd", "-fd",
                   "--fd",
                   "Enable fd or not");
+
+   args.AddOption(&vhat_amg, "-vhat_amg", "--vhat_amg", "-no_vhat_amg",
+                  "--no_vhat_amg",
+                  "using boomer amg or ads/ams for prconditioning of vhat, ams/ads is better and default");
 
    args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
                   "--no-visualization-for-grad-term",
@@ -106,6 +112,7 @@ int main(int argc, char *argv[])
 
    args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
 				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
+
 
    args.Parse();
    if(sol_opt == 1){
@@ -585,15 +592,22 @@ int main(int argc, char *argv[])
 			Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
 	   }
 	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
-   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
+   	   Operator *Vhatinv=NULL;// *Shatinv=NULL;
+//   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
 	   HypreBoomerAMG *Shatinv = NULL;
 	   
 	   V0inv = new HypreBoomerAMG( *matV0 );
 	   V0inv->SetPrintLevel(0);
 	   S0inv = new HypreBoomerAMG( *AmatS0 );
 	   S0inv->SetPrintLevel(0);
-   	   if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
-   	   else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
+	   if(vhat_amg){
+			Vhatinv = new HypreBoomerAMG( *Vhat );
+//			Vhatinv = new HypreSmoother(*Vhat);
+	   }
+	   else{
+	      if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
+   	      else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
+	   }
 	   
 	   double prec_rtol = 1e-3;
 	   int prec_maxit = 200;
@@ -656,7 +670,7 @@ int main(int argc, char *argv[])
 //	   		pcg.SetOperator(*reduced_system_operator);
 	   		pcg.SetPreconditioner(P);
 	   		pcg.SetRelTol(1e-9);
-	   		pcg.SetMaxIter(1000);
+	   		pcg.SetMaxIter(2000);
 	   		pcg.SetPrintLevel(solver_print_opt);
 	   		pcg.Mult(b,x);
 	   		MPI_Barrier(MPI_COMM_WORLD);

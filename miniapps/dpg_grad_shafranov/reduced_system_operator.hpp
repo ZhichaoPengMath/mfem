@@ -175,15 +175,15 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 {
-	if(Jacobian == NULL)
-	{
-		Jacobian = new BlockOperator(offsets);
-		Jacobian->SetBlock(0,0,matV0);
-		Jacobian->SetBlock(1,1,matS0);
-		Jacobian->SetBlock(2,2,matVhat);
-		Jacobian->SetBlock(3,3,matShat);
-	}
-
+//	if(Jacobian == NULL)
+//	{
+//		Jacobian = new BlockOperator(offsets);
+//		Jacobian->SetBlock(0,0,matV0);
+//		Jacobian->SetBlock(1,1,matS0);
+//		Jacobian->SetBlock(2,2,matVhat);
+//		Jacobian->SetBlock(3,3,matShat);
+//	}
+//
 //	return *Jacobian;
 	return * A;
 }
