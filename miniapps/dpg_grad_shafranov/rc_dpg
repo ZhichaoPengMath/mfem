@@ -3,7 +3,7 @@
 -snes_view
 -snes_monitor
 -ksp_monitor
--ksp_view
+#-ksp_view
 
 #-ksp_rtol 1e-20
 
