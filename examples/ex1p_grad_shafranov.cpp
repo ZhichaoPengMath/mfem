@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
    a->RecoverFEMSolution(X, *b, x);
 
    // 12a. compute q = 1/r grad(u)
-   FiniteElementCollection * q0_fec = new L2_FECollection(order-1, dim);
+   FiniteElementCollection * q0_fec = new L2_FECollection(order, dim);
 //   FiniteElementCollection * q0_fec = new L2_FECollection(order-1, dim);
 
    ParFiniteElementSpace * q0_space = new ParFiniteElementSpace(mesh, q0_fec, dim);
@@ -332,11 +332,26 @@ int main(int argc, char *argv[])
    
    // 12b (pzc): compute and print L2 error */
      int global_mesh_number = mesh->GetGlobalNE();
-	 double error_u_max = x.ComputeMaxError(U);
-	 double error_q_max = q0.ComputeMaxError(Q);
 
+	 // defines the quadrature rule */
+	 int order_to_integrate = 2 * order + 2;
+	 
+//	 int NumGeom = Geometry::SQUARE;
+	 int NumGeom = mesh->GetNumGeometries(dim);
+	 cout<<NumGeom<<endl;
+//	 int NumGeom = mesh->GetNumGeometries(dim);
+	 const IntegrationRule *irs[ NumGeom ];
+	 for (int i=0; i < NumGeom; ++i)
+	 {
+	     irs[i] = &(IntRules.Get(i, order_to_integrate));
+	 }
+	  
+//	 double error_u_l2 = x.ComputeL2Error(U,irs);
 	 double error_u_l2 = x.ComputeL2Error(U);
 	 double error_q_l2 = q0.ComputeL2Error(Q);
+
+	 double error_u_max = x.ComputeMaxError(U);
+	 double error_q_max = q0.ComputeMaxError(Q);
 
 	 if(myid == 0){
 		cout << "\nelement number of the mesh: "<< global_mesh_number<<endl; 
