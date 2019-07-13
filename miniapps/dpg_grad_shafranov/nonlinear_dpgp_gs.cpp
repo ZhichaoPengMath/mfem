@@ -499,6 +499,7 @@ int main(int argc, char *argv[])
 	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator() );
 	mass_u->Assemble();
 	mass_u->Finalize();
+	mass_u->SpMat() *= -1.;
 
 	HypreParMatrix * matMassU = mass_u->ParallelAssemble();
 	delete mass_u;
@@ -513,7 +514,8 @@ int main(int argc, char *argv[])
 	B.SetBlock(1, q0_var   ,matB_q_weak_div);
 	B.SetBlock(1, qhat_var ,matB_q_jump);
 
-	B.SetBlock(1, u0_var, matMassU);
+	/* comment it off when using reduced operator */
+//	B.SetBlock(1, u0_var, matMassU);
 	
 	BlockOperator InverseGram(offsets_test, offsets_test);
 	InverseGram.SetBlock(0,0,matVinv);
@@ -658,20 +660,20 @@ int main(int argc, char *argv[])
 //	   Shatinv->SetPrintLevel(1);
 	
 	   /* 9b pass all the pointer to the infomration interfce */
-//	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
-//												vtest_space, stest_space,
-//												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
-//												matB_q_jump, matVinv, matSinv,
-//												matV0, AmatS0, Vhat, Shat, 
-//												offsets, offsets_test,
-//												A,
-//												&B,
-//												&InverseGram,
-//												ess_trace_vdof_list,
-//												&b,
-//												F,
-//												f_div
-//			   );
+	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
+												vtest_space, stest_space,
+												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+												matB_q_jump, matVinv, matSinv,
+												matV0, AmatS0, Vhat, Shat, 
+												offsets, offsets_test,
+												A,
+												&B,
+												&InverseGram,
+												ess_trace_vdof_list,
+												&b,
+												F,
+												f_div
+			   );
 
 //
 //	// 10. Solve the normal equation system using the PCG iterative solver.
@@ -683,8 +685,8 @@ int main(int argc, char *argv[])
 //	   if(use_petsc){
 	   if(!use_petsc){
 			CGSolver pcg(MPI_COMM_WORLD);
-	   		pcg.SetOperator(*A);
-//	   		pcg.SetOperator(*reduced_system_operator);
+//	   		pcg.SetOperator(*A);
+	   		pcg.SetOperator(*reduced_system_operator);
 	   		pcg.SetPreconditioner(P);
 	   		pcg.SetRelTol(1e-9);
 	   		pcg.SetMaxIter(2000);
@@ -898,7 +900,7 @@ double f_exact(const Vector & x){
 			 return  -12. *M_PI * cos(4.*M_PI * xi) 
 				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
 					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-					+xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+					-xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r
