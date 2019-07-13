@@ -307,7 +307,6 @@ int main(int argc, char *argv[])
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
 
    FunctionCoefficient f_coeff( f_exact );/* coefficients */
-//   RHSCoefficient f_coeff(&u0);
    ParLinearForm * f_div(new ParLinearForm(stest_space) );
 //   f_div->Update(stest_space, F.GetBlock(1) ,0);
    f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
@@ -408,7 +407,6 @@ int main(int argc, char *argv[])
    HypreParMatrix * matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
    HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
    HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
-   HypreParMatrix * matB_u_mass = B_u_mass->ParallelAssemble();
 
    delete B_mass_q;
    delete B_u_dot_div;
@@ -477,7 +475,7 @@ int main(int argc, char *argv[])
    //    the normal equation right-hand-size, b = B^t InverseGram F.
    //
    //    B = mass_q     -u_dot_div 0        u_normal_jump
-   //        q_weak_div  mass_u    q_jump   0
+   //        q_weak_div  0         q_jump   0
    /********************************************************/
    //8. Calculate blocks myself
 	/* off diagonal block */
@@ -496,6 +494,17 @@ int main(int argc, char *argv[])
 
 	HypreParMatrix * matA33 = RAP( matVinv, matB_u_normal_jump);
 
+	/* (u,v) */
+	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
+	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator() );
+	mass_u->Assemble();
+	mass_u->Finalize();
+
+	HypreParMatrix * matMassU = mass_u->ParallelAssemble();
+	delete mass_u;
+
+
+
 	BlockOperator B(offsets_test, offsets);
 	B.SetBlock(0, q0_var  ,matB_mass_q);
 	B.SetBlock(0, u0_var  ,matB_u_dot_div);
@@ -504,14 +513,13 @@ int main(int argc, char *argv[])
 	B.SetBlock(1, q0_var   ,matB_q_weak_div);
 	B.SetBlock(1, qhat_var ,matB_q_jump);
 
-	B.SetBlock(1, u0_var   ,matB_u_mass);
+	B.SetBlock(1, u0_var, matMassU);
 	
 	BlockOperator InverseGram(offsets_test, offsets_test);
 	InverseGram.SetBlock(0,0,matVinv);
 	InverseGram.SetBlock(1,1,matSinv);
-
-	RAPOperator *A = new RAPOperator(B,InverseGram,B);
 	
+	RAPOperator * A = new RAPOperator(B,InverseGram, B);
 //	BlockOperator *A = new BlockOperator(offsets,offsets);
 //	/* diagonal */
 //	A->SetBlock(0,0,matA00);
@@ -725,7 +733,7 @@ int main(int argc, char *argv[])
 //////
 //////			Vector bb;
 //////		    petsc_newton->Mult(bb,x);
-
+//////
 	   }
 	   timer.Stop();
 	   if(myid==0){
@@ -768,6 +776,25 @@ int main(int argc, char *argv[])
 			cout<<endl;
 	   }
 
+	   /* debug */
+	   Vector u1(u0),u2(u0);
+	   ParBilinearForm * mass_mass_u = new ParBilinearForm(u0_space);
+	   mass_mass_u->AddDomainIntegrator(new MassIntegrator() );
+	   mass_mass_u->Assemble();
+	   mass_mass_u->Finalize();
+
+	   mass_mass_u->Mult(u0,u1);
+	   cout<<"haha"<<endl;
+
+	   RHSCoefficient rhs_coefficient(&u0);
+	   ParLinearForm * rhs_test = new ParLinearForm(u0_space);
+	   rhs_test->AddDomainIntegrator( new DomainLFIntegrator(rhs_coefficient) );
+	   rhs_test->Assemble();
+	   rhs_test->ParallelAssemble(u2);
+
+	   u2 -=u1;
+	   cout<<u2.Norml2()<<endl;
+	
 	   // 11. Save the refined mesh and the solution. This output can be viewed
 	   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
 	   {
@@ -871,7 +898,7 @@ double f_exact(const Vector & x){
 			 return  -12. *M_PI * cos(4.*M_PI * xi) 
 				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
 					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-			        +xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+					+xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r

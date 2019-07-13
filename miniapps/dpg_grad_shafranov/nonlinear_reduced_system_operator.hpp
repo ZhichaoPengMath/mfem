@@ -80,6 +80,7 @@ private:
 	 * linear operator for the right hand side
 	 *********************************/
     ParLinearForm * f_div;	
+
 	/*******************************
 	 * essential vdof for boundary condition
 	 * *****************************/
@@ -88,7 +89,7 @@ private:
 
 	/***************************/
 	mutable BlockOperator * Jacobian;
-	
+    mutable Vector fu;	
 
 public:
 	ReducedSystemOperator(
@@ -153,24 +154,45 @@ ReducedSystemOperator::ReducedSystemOperator(
 	f_div(_f_div),
 	b(_b),
 	F(_F),
-	Jacobian(NULL){}
+	Jacobian(NULL),
+    fu(offsets_test[2] - offsets_test[1] ){}
 
 void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
-	A->Mult(x,y);
+//	cout<<"size of y"<<y.Size()<<endl;
 
-   /* deal with boundary conditions */
-   Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-   f_div->ParallelAssemble( F1 );
+    A->Mult(x,y);
+    
+    ParGridFunction u0_now;
+	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+    u0_now.MakeTRef(u0_space, u0_vec, 0);
+	u0_now.SetFromTrueVector();
+    RHSCoefficient fu_coefficient( &u0_now );
 
-   BlockVector rhs(offsets); 
-   rhs=0.;
+	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+	fu_mass->Assemble();
+	fu_mass->ParallelAssemble(fu);
 
-   BlockVector IGF(offsets_test);
-   Ginv->Mult(F,IGF);
-   jacB->MultTranspose(IGF,rhs);
+	ofstream myfile0("fu.dat");
+    fu.Print(myfile0, 10);
 
-   y-=rhs;
+
+    /* deal with boundary conditions */
+    Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+    f_div->ParallelAssemble( F1 );
+
+    BlockVector rhs(offsets); 
+    rhs=0.;
+
+    BlockVector IGF(offsets_test);
+    Ginv->Mult(F,IGF);
+    jacB->MultTranspose(IGF,rhs);
+
+    y-=rhs;
+	y-=fu;
+
+	delete fu_mass;
 }
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
