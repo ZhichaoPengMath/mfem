@@ -287,6 +287,8 @@ int main(int argc, char *argv[])
 
    BlockVector F(offsets_test); /* block vector for the linear form on the right hand side */
    F = 0.;
+   BlockVector F_rec(offsets_test);
+   F_rec = 0.;
 
    ConstantCoefficient one(1.0);          /* coefficients */
    VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
@@ -376,6 +378,7 @@ int main(int argc, char *argv[])
    B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
 //   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
+   F_rec = F; /* deal with boundary condition here, so that when calculating dual norm things will be correct */
 
    if(myid == 0){
 		cout<<endl<<"< u, tau cdot n > assembled"<<endl;
@@ -507,7 +510,6 @@ int main(int argc, char *argv[])
 
 
 	BlockOperator B(offsets_test, offsets);
-	BlockOperator Jac(offsets_test,offsets);
 
 	B.SetBlock(0, q0_var  ,matB_mass_q);
 	B.SetBlock(0, u0_var  ,matB_u_dot_div);
@@ -515,9 +517,10 @@ int main(int argc, char *argv[])
 	
 	B.SetBlock(1, q0_var   ,matB_q_weak_div);
 	B.SetBlock(1, qhat_var ,matB_q_jump);
-	/* comment it off when using reduced operator */
 //	B.SetBlock(1, u0_var, matMassU);
 
+
+	BlockOperator Jac(offsets_test,offsets);
 
 	Jac.SetBlock(0, q0_var  ,matB_mass_q);
 	Jac.SetBlock(0, u0_var  ,matB_u_dot_div);
@@ -525,9 +528,21 @@ int main(int argc, char *argv[])
 	
 	Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
 	Jac.SetBlock(1, qhat_var ,matB_q_jump);
-	/* comment it off when using reduced operator */
-	Jac.SetBlock(1, u0_var, matMassU);
+//	Jac.SetBlock(1, u0_var, matMassU);
 
+	BlockOperator * Jac_rhs = NULL;
+	if(!use_petsc){
+		Jac_rhs = new BlockOperator(offsets_test,offsets);
+
+		Jac_rhs->SetBlock(0, q0_var  ,matB_mass_q);
+		Jac_rhs->SetBlock(0, u0_var  ,matB_u_dot_div);
+		Jac_rhs->SetBlock(0, uhat_var,matB_u_normal_jump);
+		        
+		Jac_rhs->SetBlock(1, q0_var   ,matB_q_weak_div);
+		Jac_rhs->SetBlock(1, qhat_var ,matB_q_jump);
+		Jac_rhs->SetBlock(1, u0_var, matMassU);
+
+	}
 
 	
 	BlockOperator InverseGram(offsets_test, offsets_test);
@@ -564,7 +579,9 @@ int main(int argc, char *argv[])
 	    f_div->ParallelAssemble( F.GetBlock(1) );
 	    BlockVector IGF(offsets_test);
 	 	InverseGram.Mult(F,IGF);
-	 	Jac.MultTranspose(IGF,b);
+	 	Jac_rhs->MultTranspose(IGF,b);
+
+		F_rec = F;
 
 		F = 0.;
 	}
@@ -686,7 +703,7 @@ int main(int argc, char *argv[])
 												matV0, AmatS0, Vhat, Shat, 
 												offsets, offsets_test,
 												A,
-//												&B,
+												&B,
 												&Jac,
 												&InverseGram,
 												ess_trace_vdof_list,
@@ -767,7 +784,27 @@ int main(int argc, char *argv[])
 	   {
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);
-	      LSres -= F;
+
+		  /* Bx - constant part */
+	      LSres -= F_rec;
+
+		  /* Bx - nonlinear part */
+		  F_rec = 0.;
+		  Vector F1(F_rec.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+		  ParGridFunction u0_now;
+		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+    	  u0_now.MakeTRef(u0_space, u0_vec, 0);
+		  u0_now.SetFromTrueVector();
+    	  RHSCoefficient fu_coefficient( &u0_now );
+
+		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+		  fu_mass->Assemble();
+
+		  fu_mass->ParallelAssemble(F1);
+		  LSres -= F_rec;
+
+		  /* calculate the dual norm */
 	      InverseGram.Mult(LSres, tmp);
 		  double res = sqrt(InnerProduct(LSres,tmp) );
 		  if(myid == 0){
@@ -863,7 +900,9 @@ int main(int argc, char *argv[])
 
 //   // 13. Free the used memory.
 	/* reduced system operator */
-//   delete reduced_system_operator;
+   delete reduced_system_operator;
+   /* delete operators */
+   delete Jac_rhs;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 

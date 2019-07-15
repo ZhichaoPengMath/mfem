@@ -68,14 +68,18 @@ private:
 //	BlockOperator * A;
 	/*******************************
 	 * ``Right hand side"  is
-	 *		jacB^T * Ginv F
+	 *		Jac^T * Ginv F
+	 *	Equation to solve
+	 *		Jac^T * Ginv B ( x - f(x) ) = 0
 	 * *****************************/
-	BlockOperator * jacB;
+	BlockOperator * B;
 	BlockOperator * Ginv;
 	Vector *b;
 	Vector &F;
 	Operator * A;
 
+    mutable HypreParMatrix * DfDu;
+	mutable BlockOperator * Jac;
 	/*********************************
 	 * linear operator for the right hand side
 	 *********************************/
@@ -104,13 +108,16 @@ public:
 			Array<int> _offsets, Array<int> _offsets_test,
 			Operator* _A,
 //			BlockOperator* _A,
-			BlockOperator* _jacB,
+			BlockOperator* _B,
+			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
 			const Array<int> &_ess_trace_vdof_list,
 			Vector *_b,
 			Vector &_F,
 			ParLinearForm * _f_div
 			);
+	// dynamically update Jac = B - Df(x)/Dx //
+	virtual void UpdateJac(const Vector &x) const;
 	// Define FF(x) = 0 
 	virtual void Mult( const Vector &x, Vector &y) const;  
 
@@ -120,6 +127,9 @@ public:
 
 };
 
+/******************************************************
+ *  Pass the pointers, initialization
+ *******************************************************/
 ReducedSystemOperator::ReducedSystemOperator(
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
@@ -131,7 +141,8 @@ ReducedSystemOperator::ReducedSystemOperator(
 	Array<int> _offsets, Array<int> _offsets_test,
 	Operator *_A,
 //	BlockOperator *_A,
-	BlockOperator* _jacB,
+	BlockOperator* _B,
+	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
 	const Array<int> &_ess_trace_vdof_list,
 	Vector *_b,
@@ -148,24 +159,53 @@ ReducedSystemOperator::ReducedSystemOperator(
 	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
 	offsets(_offsets), offsets_test(_offsets_test),
 	A(_A),
-	jacB(_jacB),
+	B(_B),
+	Jac(_Jac),
 	Ginv(_Ginv),
 	ess_trace_vdof_list(_ess_trace_vdof_list),
 	f_div(_f_div),
 	b(_b),
 	F(_F),
 	Jacobian(NULL),
+	DfDu(NULL),
     fu(offsets_test[2] - offsets_test[1] ){}
+/******************************************************
+ *  Update Jac = B - Df/dx
+ *******************************************************/
+void ReducedSystemOperator::UpdateJac(const Vector &x) const
+{
+	/* f(u) */
+	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
+	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator() );
+	mass_u->Assemble();
+	mass_u->Finalize();
+	mass_u->SpMat() *= -1.;
 
+	DfDu = mass_u->ParallelAssemble();
+	delete mass_u;
+
+	Jac->SetBlock(1,1,DfDu);
+}
+
+
+/******************************************************
+ *  Try to solve F(x) = 0
+ *  Mult gives us y = F(x)
+ *******************************************************/
 void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
-//	cout<<"size of y"<<y.Size()<<endl;
 
-    A->Mult(x,y);
+//    A->Mult(x,y);
+	/* update the Jacobian */
+	UpdateJac(x);
+
+	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*B);
+	oper->Mult(x,y);
     
+
+
+	/* update -(f(u),v) part */
     Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-
-
     ParGridFunction u0_now;
 	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     u0_now.MakeTRef(u0_space, u0_vec, 0);
@@ -183,11 +223,12 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
     BlockVector IGF(offsets_test);
     Ginv->Mult(F,IGF);
-    jacB->MultTranspose(IGF,rhs);
+    Jac->MultTranspose(IGF,rhs);
    
 	y-=rhs;
 
 	delete fu_mass;
+	delete oper;
 }
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
