@@ -507,21 +507,38 @@ int main(int argc, char *argv[])
 
 
 	BlockOperator B(offsets_test, offsets);
+	BlockOperator Jac(offsets_test,offsets);
+
 	B.SetBlock(0, q0_var  ,matB_mass_q);
 	B.SetBlock(0, u0_var  ,matB_u_dot_div);
 	B.SetBlock(0, uhat_var,matB_u_normal_jump);
 	
 	B.SetBlock(1, q0_var   ,matB_q_weak_div);
 	B.SetBlock(1, qhat_var ,matB_q_jump);
-
 	/* comment it off when using reduced operator */
 //	B.SetBlock(1, u0_var, matMassU);
+
+
+	Jac.SetBlock(0, q0_var  ,matB_mass_q);
+	Jac.SetBlock(0, u0_var  ,matB_u_dot_div);
+	Jac.SetBlock(0, uhat_var,matB_u_normal_jump);
+	
+	Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
+	Jac.SetBlock(1, qhat_var ,matB_q_jump);
+	/* comment it off when using reduced operator */
+	Jac.SetBlock(1, u0_var, matMassU);
+
+
 	
 	BlockOperator InverseGram(offsets_test, offsets_test);
 	InverseGram.SetBlock(0,0,matVinv);
 	InverseGram.SetBlock(1,1,matSinv);
 	
-	RAPOperator * A = new RAPOperator(B,InverseGram, B);
+//	RAPOperator * A = new RAPOperator(B,InverseGram,B );
+//	RAPOperator * A = new RAPOperator(Jac,InverseGram, Jac);
+	RAPOperator * A = new RAPOperator(Jac,InverseGram, B);
+	
+
 //	BlockOperator *A = new BlockOperator(offsets,offsets);
 //	/* diagonal */
 //	A->SetBlock(0,0,matA00);
@@ -547,7 +564,9 @@ int main(int argc, char *argv[])
 	    f_div->ParallelAssemble( F.GetBlock(1) );
 	    BlockVector IGF(offsets_test);
 	 	InverseGram.Mult(F,IGF);
-	 	B.MultTranspose(IGF,b);
+	 	Jac.MultTranspose(IGF,b);
+
+		F = 0.;
 	}
 	    
 	   // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
@@ -667,7 +686,8 @@ int main(int argc, char *argv[])
 												matV0, AmatS0, Vhat, Shat, 
 												offsets, offsets_test,
 												A,
-												&B,
+//												&B,
+												&Jac,
 												&InverseGram,
 												ess_trace_vdof_list,
 												&b,
@@ -684,6 +704,7 @@ int main(int argc, char *argv[])
 	   timer.Start();
 //	   if(use_petsc){
 	   if(!use_petsc){
+//			GMRESSolver pcg(MPI_COMM_WORLD);
 			CGSolver pcg(MPI_COMM_WORLD);
 //	   		pcg.SetOperator(*A);
 	   		pcg.SetOperator(*reduced_system_operator);
@@ -691,6 +712,7 @@ int main(int argc, char *argv[])
 	   		pcg.SetRelTol(1e-9);
 	   		pcg.SetMaxIter(2000);
 	   		pcg.SetPrintLevel(solver_print_opt);
+
 	   		pcg.Mult(b,x);
 	   		MPI_Barrier(MPI_COMM_WORLD);
 	   }

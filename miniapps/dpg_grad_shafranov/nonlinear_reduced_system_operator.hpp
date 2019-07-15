@@ -65,7 +65,7 @@ private:
 	/**********************************
 	 * Operator A
 	 * ********************************/
-	BlockOperator * A;
+//	BlockOperator * A;
 	/*******************************
 	 * ``Right hand side"  is
 	 *		jacB^T * Ginv F
@@ -74,7 +74,7 @@ private:
 	BlockOperator * Ginv;
 	Vector *b;
 	Vector &F;
-//	Operator * A;
+	Operator * A;
 
 	/*********************************
 	 * linear operator for the right hand side
@@ -102,8 +102,8 @@ public:
 			/* preconditioner */
 			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 			Array<int> _offsets, Array<int> _offsets_test,
-//			Operator* _A,
-			BlockOperator* _A,
+			Operator* _A,
+//			BlockOperator* _A,
 			BlockOperator* _jacB,
 			BlockOperator* _Ginv,
 			const Array<int> &_ess_trace_vdof_list,
@@ -129,8 +129,8 @@ ReducedSystemOperator::ReducedSystemOperator(
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 	Array<int> _offsets, Array<int> _offsets_test,
-//	Operator *_A,
-	BlockOperator *_A,
+	Operator *_A,
+//	BlockOperator *_A,
 	BlockOperator* _jacB,
 	BlockOperator* _Ginv,
 	const Array<int> &_ess_trace_vdof_list,
@@ -163,6 +163,9 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
     A->Mult(x,y);
     
+    Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+
+
     ParGridFunction u0_now;
 	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     u0_now.MakeTRef(u0_space, u0_vec, 0);
@@ -172,15 +175,8 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
 	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
 	fu_mass->Assemble();
-	fu_mass->ParallelAssemble(fu);
 
-	ofstream myfile0("fu.dat");
-    fu.Print(myfile0, 10);
-
-
-    /* deal with boundary conditions */
-    Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-    f_div->ParallelAssemble( F1 );
+	fu_mass->ParallelAssemble(F1);
 
     BlockVector rhs(offsets); 
     rhs=0.;
@@ -188,9 +184,8 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
     BlockVector IGF(offsets_test);
     Ginv->Mult(F,IGF);
     jacB->MultTranspose(IGF,rhs);
-
-    y-=rhs;
-	y-=fu;
+   
+	y-=rhs;
 
 	delete fu_mass;
 }
