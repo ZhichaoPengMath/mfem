@@ -4,6 +4,8 @@
 #include <iostream>
 #include <fstream>
 
+#include "nonlinear_gs_integrator.hpp"
+
 #if defined(PETSC_HAVE_HYPRE)
 #include "petscmathypre.h"
 #endif
@@ -23,8 +25,38 @@
 using namespace std;
 using namespace mfem;
 
-class ReducedSystemOperator : public Operator
+class DFDUOperator : public Operator
 {
+private:
+	ParFiniteElementSpace * u0_space, * stest_space;
+public:
+	DFDUOperator(ParFiniteElementSpace * _u0_space, ParFiniteElementSpace* _stest_space):
+		u0_space(_u0_space), stest_space(_stest_space){};
+	
+	virtual void Mult( const Vector &x, Vector &y) const;  
+};
+
+void DFDUOperator::Mult(const Vector &x, Vector &y) const
+{
+    ParGridFunction u0_now;
+
+	Vector u0_vec(x.GetData(), x.Size() );
+    u0_now.MakeTRef(u0_space,u0_vec , 0);
+	u0_now.SetFromTrueVector();
+    DFDUCoefficient fu_coefficient( &u0_now );
+
+	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+	fu_mass->Assemble();
+
+	fu_mass->ParallelAssemble(y);
+	delete fu_mass;
+}
+
+
+/**********************************************************/
+class ReducedSystemOperator : public Operator
+{ 
 private:
 	/****************************************
 	 * pointers to the trial spaces
@@ -78,7 +110,8 @@ private:
 	Vector &F;
 	Operator * A;
 
-    mutable HypreParMatrix * DfDu;
+//    mutable HypreParMatrix * DfDu;
+	mutable Operator * DfDu;
 	mutable BlockOperator * Jac;
 	/*********************************
 	 * linear operator for the right hand side
@@ -174,17 +207,26 @@ ReducedSystemOperator::ReducedSystemOperator(
  *******************************************************/
 void ReducedSystemOperator::UpdateJac(const Vector &x) const
 {
-	/* f(u) */
+	/* calculate df(u)/du  */
+    ParGridFunction u0_now;
+
+	Vector u0_vec(x.GetData(), x.Size() );
+    u0_now.MakeTRef(u0_space,u0_vec , 0);
+	u0_now.SetFromTrueVector();
+    DFDUCoefficient dfu_coefficient( &u0_now );
+
 	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
-	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator() );
+	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
 	mass_u->Assemble();
 	mass_u->Finalize();
 	mass_u->SpMat() *= -1.;
 
+//	DfDu = mass_u->SpMat();
 	DfDu = mass_u->ParallelAssemble();
 	delete mass_u;
 
-	Jac->SetBlock(1,1,DfDu);
+	Jac->SetBlock(1,1,DfDu );
+	
 }
 
 
@@ -217,6 +259,15 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	fu_mass->Assemble();
 
 	fu_mass->ParallelAssemble(F1);
+	/* debug */
+//	ParMixedBilinearForm * bfu_mass = new ParMixedBilinearForm(u0_space, stest_space);
+//	bfu_mass->AddDomainIntegrator( new MixedScalarMassIntegrator() );
+//	bfu_mass->Assemble();
+//	bfu_mass->Finalize();
+//	HypreParMatrix * mat_bfu_mass = bfu_mass->ParallelAssemble();
+//	F1 = 0.;
+//	mat_bfu_mass->Mult(u0_vec,F1); delete mat_bfu_mass;
+//	delete bfu_mass;
 
     BlockVector rhs(offsets); 
     rhs=0.;
@@ -375,3 +426,4 @@ public:
 
    virtual ~PreconditionerFactory() {};
 };
+

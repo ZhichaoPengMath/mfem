@@ -326,12 +326,6 @@ int main(int argc, char *argv[])
    uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
    uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_tdof_list);
 
-//   if(myid == 0){
-//	  cout<<endl<<endl<<"Boundary information: "<<endl;
-// 	  cout<<" boundary attribute size " <<mesh->bdr_attributes.Max() <<endl;
-// 	  cout<<" number of essential  v_dofs "<<ess_trace_vdof_list.Size()<<endl;
-// 	  cout<<" number of essential  true_dofs "<<ess_trace_tdof_list.Size()<<endl;
-//  }
 
 
    // 7. Set up the mixed bilinear forms 
@@ -838,23 +832,22 @@ int main(int argc, char *argv[])
 	   }
 
 	   /* debug */
-	   Vector u1(u0),u2(u0);
-	   ParBilinearForm * mass_mass_u = new ParBilinearForm(u0_space);
-	   mass_mass_u->AddDomainIntegrator(new MassIntegrator() );
-	   mass_mass_u->Assemble();
-	   mass_mass_u->Finalize();
-
-	   mass_mass_u->Mult(u0,u1);
-	   cout<<"haha"<<endl;
-
-	   RHSCoefficient rhs_coefficient(&u0);
-	   ParLinearForm * rhs_test = new ParLinearForm(u0_space);
-	   rhs_test->AddDomainIntegrator( new DomainLFIntegrator(rhs_coefficient) );
-	   rhs_test->Assemble();
-	   rhs_test->ParallelAssemble(u2);
-
-	   u2 -=u1;
-	   cout<<u2.Norml2()<<endl;
+//	   Vector u1(u0),u2(u0);
+//	   ParBilinearForm * mass_mass_u = new ParBilinearForm(u0_space);
+//	   mass_mass_u->AddDomainIntegrator(new MassIntegrator() );
+//	   mass_mass_u->Assemble();
+//	   mass_mass_u->Finalize();
+//
+//	   mass_mass_u->Mult(u0,u1);
+//
+//	   RHSCoefficient rhs_coefficient(&u0);
+//	   ParLinearForm * rhs_test = new ParLinearForm(u0_space);
+//	   rhs_test->AddDomainIntegrator( new DomainLFIntegrator(rhs_coefficient) );
+//	   rhs_test->Assemble();
+//	   rhs_test->ParallelAssemble(u2);
+//
+//	   u2 -=u1;
+//	   cout<<u2.Norml2()<<endl;
 	
 	   // 11. Save the refined mesh and the solution. This output can be viewed
 	   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
