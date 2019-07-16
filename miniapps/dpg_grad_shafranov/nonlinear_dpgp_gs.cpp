@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
    int order = 1;
    bool visualization = 1;
    bool q_visual = 1;
+   bool q_vis_error = false;
    int ref_levels = -1;
    int gradgrad_opt = 0;
    int solver_print_opt = 0;
@@ -67,6 +68,10 @@ int main(int argc, char *argv[])
    args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
                   "--no petsc",
                   "Enable petsc or not");
+
+   args.AddOption(&q_vis_error, "-q_vis_error", "--q_vis_fd", "-no_q_vis_error",
+                  "--no_q_vis_error",
+                  "visualize error of q or not, by default not visualize it");
 
    args.AddOption(&use_factory, "-no_fd", "--no_fd", "-fd",
                   "--fd",
@@ -697,6 +702,8 @@ int main(int argc, char *argv[])
 												matV0, AmatS0, Vhat, Shat, 
 												offsets, offsets_test,
 												A,
+												matAL01,
+												matAL11,
 												&B,
 												&Jac,
 												&InverseGram,
@@ -851,28 +858,44 @@ int main(int argc, char *argv[])
 	
 	   // 11. Save the refined mesh and the solution. This output can be viewed
 	   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
+	   ParGridFunction * q_projection = NULL; 
+	   if(q_vis_error){
+		   q_projection = new ParGridFunction(q0_space);
+		   q_projection->ProjectCoefficient(q_coeff);
+		   *q_projection -= q0;
+
+		   cout<<q_projection->Normlinf()<<endl;
+	   }
+
 	   {
-		  ostringstream mesh_name, sol_name;
-      	  mesh_name << "mesh." << setfill('0') << setw(6) << myid;
-      	  sol_name << "sol." << setfill('0') << setw(6) << myid;
+	      ostringstream mesh_name, sol_name;
+          mesh_name << "mesh." << setfill('0') << setw(6) << myid;
+          sol_name << "sol." << setfill('0') << setw(6) << myid;
 
 	      ofstream mesh_ofs(mesh_name.str().c_str() );
 	      mesh_ofs.precision(8);
 	      mesh->Print(mesh_ofs);
-	
+	  
 	      ofstream sol_ofs(sol_name.str().c_str() );
 	      sol_ofs.precision(8);
 	      u0.Save(sol_ofs);
-	
-		  if(q_visual){
-			 ostringstream q_name;
-			 mesh_name<< "q."<<setfill('0')<<setw(6)<<myid;
+	  
+	      if(q_visual){
+	    	 ostringstream q_name;
+	    	 mesh_name<< "q."<<setfill('0')<<setw(6)<<myid;
 	         ofstream q_variable_ofs(q_name.str().c_str() );
 	         q_variable_ofs.precision(8);
 	         q0.Save(q_variable_ofs);
+	      }
+		  if(q_vis_error){
+	    	 ostringstream q_error_name;
+	    	 mesh_name<< "q_error."<<setfill('0')<<setw(6)<<myid;
+	         ofstream q_error_variable_ofs(q_error_name.str().c_str() );
+	         q_error_variable_ofs.precision(8);
+	         q_projection->Save(q_error_variable_ofs);
 		  }
 	   }
-	
+	  
 	   // 12. Send the solution by socket to a GLVis server.
 	   if (visualization)
 	   {
@@ -881,15 +904,22 @@ int main(int argc, char *argv[])
 	      socketstream sol_sock(vishost, visport);
 		  sol_sock << "parallel " << num_procs << " " << myid << "\n";
       	  sol_sock.precision(8);
-      	  sol_sock << "solution\n" << *mesh <<  u0 << flush;
+      	  sol_sock << "solution\n" << *mesh <<  u0 << "window_title 'U' "<<endl;
 	
 		  if(q_visual){
 	         socketstream q_sock(vishost, visport);
 			 q_sock << "parallel " << num_procs << " " << myid << "\n";
       	  	 q_sock.precision(8);
-      	  	 q_sock << "solution\n" << *mesh <<  q0 << flush;
+      	  	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
+		  }
+		  if(q_vis_error){
+	         socketstream q_error_sock(vishost, visport);
+			 q_error_sock << "parallel " << num_procs << " " << myid << "\n";
+      	  	 q_error_sock.precision(8);
+      	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection << "window_title 'Q_error' "<<endl;
 		  }
 	   }
+	   delete q_projection;
 
 //   // 13. Free the used memory.
 	/* reduced system operator */
@@ -993,7 +1023,7 @@ double f_exact(const Vector & x){
 			 return  -12. *M_PI * cos(4.*M_PI * xi) 
 				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
 					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-					-xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+					-u_exact(x);
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r

@@ -109,29 +109,42 @@ private:
 	Vector &F;
 //	Operator * A;
 
-//    mutable HypreParMatrix * DfDu;
-	mutable Operator * DfDu;
+//    mutable HypreParMatrix * NDfDu;
+	mutable HypreParMatrix * NDfDu;
+//	mutable Operator * NDfDu;
 	mutable BlockOperator * Jac;
 	/**********************************
 	 * Operator A = Jac^T G^-1 Jac 
-	 *			  = AL + ANL,
-	 * AL is linear part and ANL is nonlinear part
+	 *			  = AL + AN,
+	 * AL is linear part and AN is nonlinear part
 	 *
 	 * AL  = [ AL00    AL01   AL02   AL03
 	 *	       AL01^T  AL11   0      AL13
 	 *         AL02^T  0      AL22   0
 	 *	       AL03^T  AL13^T 0      AL33 ]
 	 *
-	 * ANL = [ 0      AN01   0     0
+	 * AN  = [ 0      AN01   0     0
 	 *		   AN01^T AN11   AN12  0
 	 *		   0      AN12^T 0     0
 	 *		   0      0      0     0 ]
 	 *
-	 * AN01 = -DQ^T S^-1 DfDu
-	 * AN11 =  DFDu^T S^-1 DfDu
-	 * AN12 = -DF^T S^-1 TQ
+	 * AN01 = DQ^T S^-1 NDfDu
+	 * AN11 = DFDu^T S^-1 NDfDu
+	 * AN12 = DF^T S^-1 TQ
+	 *
+	 * Linear Part is assembled and 
+	 * passed to A before iteration 0
+	 * in each iteration step
+	 * we update AN and A
 	 * ********************************/
-	BlockOperator * A;
+	mutable BlockOperator * A;
+
+	mutable HypreParMatrix * AL01;
+	mutable HypreParMatrix * AL11;
+
+	mutable HypreParMatrix * AN01;
+	mutable HypreParMatrix * AN11;
+	mutable HypreParMatrix * AN12;
 	/*********************************
 	 * linear operator for the right hand side
 	 *********************************/
@@ -160,6 +173,8 @@ public:
 			Array<int> _offsets, Array<int> _offsets_test,
 //			Operator* _A,
 			BlockOperator* _A,
+			HypreParMatrix * _AL01,
+			HypreParMatrix * _AL11,
 			BlockOperator* _B,
 			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
@@ -168,8 +183,12 @@ public:
 			Vector &_F,
 			ParLinearForm * _f_div
 			);
+	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
+	virtual void UpdateNDFDU(const Vector &x) const;
+
 	// dynamically update Jac = B - Df(x)/Dx //
 	virtual void UpdateJac(const Vector &x) const;
+
 	// Define FF(x) = 0 
 	virtual void Mult( const Vector &x, Vector &y) const;  
 
@@ -193,6 +212,8 @@ ReducedSystemOperator::ReducedSystemOperator(
 	Array<int> _offsets, Array<int> _offsets_test,
 //	Operator *_A,
 	BlockOperator *_A,
+	HypreParMatrix * _AL01,
+	HypreParMatrix * _AL11,
 	BlockOperator* _B,
 	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
@@ -211,6 +232,11 @@ ReducedSystemOperator::ReducedSystemOperator(
 	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
 	offsets(_offsets), offsets_test(_offsets_test),
 	A(_A),
+	AL01(_AL01),
+	AL11(_AL11),
+	AN01(NULL),
+	AN11(NULL),
+	AN12(NULL),
 	B(_B),
 	Jac(_Jac),
 	Ginv(_Ginv),
@@ -219,14 +245,15 @@ ReducedSystemOperator::ReducedSystemOperator(
 	b(_b),
 	F(_F),
 	Jacobian(NULL),
-	DfDu(NULL),
+	NDfDu(NULL),
     fu(offsets_test[2] - offsets_test[1] ){}
 /******************************************************
- *  Update Jac = B - Df/dx
+ *  Update NDfDu = DF(u)/Du
  *******************************************************/
-void ReducedSystemOperator::UpdateJac(const Vector &x) const
+void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 {
 	/* calculate df(u)/du  */
+	delete NDfDu;
     ParGridFunction u0_now;
 
 	Vector u0_vec(x.GetData(), x.Size() );
@@ -240,11 +267,36 @@ void ReducedSystemOperator::UpdateJac(const Vector &x) const
 	mass_u->Finalize();
 	mass_u->SpMat() *= -1.;
 
-//	DfDu = mass_u->SpMat();
-	DfDu = mass_u->ParallelAssemble();
+	NDfDu = mass_u->ParallelAssemble();
 	delete mass_u;
+	
+}
+/******************************************************
+ *  Update Jac = B - Df/dx
+ *******************************************************/
+void ReducedSystemOperator::UpdateJac(const Vector &x) const
+{
+	/* calculate df(u)/du  */
+//    ParGridFunction u0_now;
+//
+//	Vector u0_vec(x.GetData(), x.Size() );
+//    u0_now.MakeTRef(u0_space,u0_vec , 0);
+//	u0_now.SetFromTrueVector();
+//    DFDUCoefficient dfu_coefficient( &u0_now );
+//
+//	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
+//	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
+//	mass_u->Assemble();
+//	mass_u->Finalize();
+//	mass_u->SpMat() *= -1.;
+//
+////	NDfDu = mass_u->SpMat();
+//	NDfDu = mass_u->ParallelAssemble();
+//	delete mass_u;
 
-	Jac->SetBlock(1,1,DfDu );
+//	UpdateNDFDU(x);
+
+	Jac->SetBlock(1,1,NDfDu );
 	
 }
 
@@ -255,8 +307,8 @@ void ReducedSystemOperator::UpdateJac(const Vector &x) const
  *******************************************************/
 void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
-
-//    A->Mult(x,y);
+	/* update the Df/Du */
+	UpdateNDFDU(x);
 	/* update the Jacobian */
 	UpdateJac(x);
 
@@ -300,16 +352,30 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 {
-//	if(Jacobian == NULL)
-//	{
-//		Jacobian = new BlockOperator(offsets);
-//		Jacobian->SetBlock(0,0,matV0);
-//		Jacobian->SetBlock(1,1,matS0);
-//		Jacobian->SetBlock(2,2,matVhat);
-//		Jacobian->SetBlock(3,3,matShat);
-//	}
-//
-//	return *Jacobian;
+	/* update the -Df/Du */
+	UpdateNDFDU(x);
+	/* update AN01, AN11, AN12 */
+	delete AN01;
+	delete AN11;
+	delete AN12;
+
+	/* nonlinear part */
+	AN01 = RAP(matB_q_weak_div, matSinv, NDfDu);
+	AN01->Add(1.,*AL01);
+
+	AN11 = RAP(NDfDu, matSinv, NDfDu);
+	AN11->Add(1.,*AL11);
+
+	AN12 = RAP(NDfDu, matSinv, matB_q_jump);
+
+	A->SetBlock(0,1,AN01);
+	A->SetBlock(1,0,AN01->Transpose() );
+
+	A->SetBlock(1,1,AN11);
+
+	A->SetBlock(1,2,AN12);
+	A->SetBlock(2,1,AN12->Transpose() );
+
 	return * A;
 }
 
