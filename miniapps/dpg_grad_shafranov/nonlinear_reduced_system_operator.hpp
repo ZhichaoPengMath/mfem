@@ -94,10 +94,9 @@ private:
 	 * ****************************/
 	Array<int> offsets;
 	Array<int> offsets_test;
-	/**********************************
-	 * Operator A
-	 * ********************************/
-//	BlockOperator * A;
+	/***********************************************************
+	 * pointer to parallel matrix corresponding to the preconditioner
+	 * *********************************************************/
 	/*******************************
 	 * ``Right hand side"  is
 	 *		Jac^T * Ginv F
@@ -108,11 +107,31 @@ private:
 	BlockOperator * Ginv;
 	Vector *b;
 	Vector &F;
-	Operator * A;
+//	Operator * A;
 
 //    mutable HypreParMatrix * DfDu;
 	mutable Operator * DfDu;
 	mutable BlockOperator * Jac;
+	/**********************************
+	 * Operator A = Jac^T G^-1 Jac 
+	 *			  = AL + ANL,
+	 * AL is linear part and ANL is nonlinear part
+	 *
+	 * AL  = [ AL00    AL01   AL02   AL03
+	 *	       AL01^T  AL11   0      AL13
+	 *         AL02^T  0      AL22   0
+	 *	       AL03^T  AL13^T 0      AL33 ]
+	 *
+	 * ANL = [ 0      AN01   0     0
+	 *		   AN01^T AN11   AN12  0
+	 *		   0      AN12^T 0     0
+	 *		   0      0      0     0 ]
+	 *
+	 * AN01 = -DQ^T S^-1 DfDu
+	 * AN11 =  DFDu^T S^-1 DfDu
+	 * AN12 = -DF^T S^-1 TQ
+	 * ********************************/
+	BlockOperator * A;
 	/*********************************
 	 * linear operator for the right hand side
 	 *********************************/
@@ -139,8 +158,8 @@ public:
 			/* preconditioner */
 			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 			Array<int> _offsets, Array<int> _offsets_test,
-			Operator* _A,
-//			BlockOperator* _A,
+//			Operator* _A,
+			BlockOperator* _A,
 			BlockOperator* _B,
 			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
@@ -172,8 +191,8 @@ ReducedSystemOperator::ReducedSystemOperator(
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 	Array<int> _offsets, Array<int> _offsets_test,
-	Operator *_A,
-//	BlockOperator *_A,
+//	Operator *_A,
+	BlockOperator *_A,
 	BlockOperator* _B,
 	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
@@ -241,6 +260,7 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	/* update the Jacobian */
 	UpdateJac(x);
 
+//	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*Jac);
 	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*B);
 	oper->Mult(x,y);
     
@@ -248,6 +268,7 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
 	/* update -(f(u),v) part */
     Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+	F1 = 0.;
     ParGridFunction u0_now;
 	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     u0_now.MakeTRef(u0_space, u0_vec, 0);
@@ -258,16 +279,12 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
 	fu_mass->Assemble();
 
-	fu_mass->ParallelAssemble(F1);
-	/* debug */
-//	ParMixedBilinearForm * bfu_mass = new ParMixedBilinearForm(u0_space, stest_space);
-//	bfu_mass->AddDomainIntegrator( new MixedScalarMassIntegrator() );
-//	bfu_mass->Assemble();
-//	bfu_mass->Finalize();
-//	HypreParMatrix * mat_bfu_mass = bfu_mass->ParallelAssemble();
-//	F1 = 0.;
-//	mat_bfu_mass->Mult(u0_vec,F1); delete mat_bfu_mass;
-//	delete bfu_mass;
+	fu_mass->ParallelAssemble(F1); delete fu_mass;
+	/* update linear source part */
+	Vector F2( F1.Size() );
+    f_div->ParallelAssemble( F2 );
+
+	F1 += F2;
 
     BlockVector rhs(offsets); 
     rhs=0.;
@@ -278,7 +295,6 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
    
 	y-=rhs;
 
-	delete fu_mass;
 	delete oper;
 }
 

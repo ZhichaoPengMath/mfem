@@ -38,6 +38,30 @@ namespace mfem
 //				+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi);
 	}
 
+
+/************************************************************/
+	class RHSCoefficient2 : public Coefficient
+	{
+		private:
+			GridFunction *u;
+		public:
+			RHSCoefficient2(GridFunction *_u): u(_u){};
+
+			double Eval(ElementTransformation &T, const IntegrationPoint &ip);
+	};
+
+	double RHSCoefficient2::Eval(ElementTransformation &T, const IntegrationPoint &ip)
+	{
+		/* coordinate */
+		double x[3];
+		Vector transip(x,3);
+		T.Transform(ip, transip);
+
+		double uip = u->GetValue(T.ElementNo,ip);
+
+		double uu = uip - sin(4*M_PI*x[0] )*sin(4*M_PI*x[1] );
+		return uu*uu*uu;
+	}
 /************************************************************/
 	class DFDUCoefficient : public Coefficient
 	{
@@ -64,8 +88,9 @@ namespace mfem
 		double yi = transip(1);
 
 		double uip = u->GetValue(T.ElementNo,ip);
+		double uu = uip - sin(4*M_PI*x[0] )*sin(4*M_PI*x[1] );
 
-		return 1;
+		return 3*uu*uu;
 	}
 
 }

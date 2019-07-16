@@ -476,20 +476,20 @@ int main(int argc, char *argv[])
    /********************************************************/
    //8. Calculate blocks myself
 	/* off diagonal block */
-    HypreParMatrix *matA01 = RAP(matB_mass_q,matVinv, matB_u_dot_div);
-    HypreParMatrix *matA02 = RAP(matB_q_weak_div, matSinv, matB_q_jump);
-    HypreParMatrix *matA03 = RAP(matB_mass_q,matVinv, matB_u_normal_jump);
+    HypreParMatrix *matAL01 = RAP(matB_mass_q,matVinv, matB_u_dot_div);
+    HypreParMatrix *matAL02 = RAP(matB_q_weak_div, matSinv, matB_q_jump);
+    HypreParMatrix *matAL03 = RAP(matB_mass_q,matVinv, matB_u_normal_jump);
      
-    HypreParMatrix *matA13 = RAP(matB_u_dot_div, matVinv, matB_u_normal_jump);
+    HypreParMatrix *matAL13 = RAP(matB_u_dot_div, matVinv, matB_u_normal_jump);
    /* diagonal block */
-	HypreParMatrix * matA00  = RAP(matB_mass_q, matVinv, matB_mass_q);
-	matA00->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
+	HypreParMatrix * matAL00  = RAP(matB_mass_q, matVinv, matB_mass_q);
+	matAL00->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
 	
-	HypreParMatrix * matA11 = RAP( matVinv, matB_u_dot_div);
+	HypreParMatrix * matAL11 = RAP( matVinv, matB_u_dot_div);
 	
-	HypreParMatrix * matA22 = RAP( matSinv, matB_q_jump);
+	HypreParMatrix * matAL22 = RAP( matSinv, matB_q_jump);
 
-	HypreParMatrix * matA33 = RAP( matVinv, matB_u_normal_jump);
+	HypreParMatrix * matAL33 = RAP( matVinv, matB_u_normal_jump);
 
 	/* (u,v) */
 	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
@@ -545,26 +545,26 @@ int main(int argc, char *argv[])
 	
 //	RAPOperator * A = new RAPOperator(B,InverseGram,B );
 //	RAPOperator * A = new RAPOperator(Jac,InverseGram, Jac);
-	RAPOperator * A = new RAPOperator(Jac,InverseGram, B);
+//	RAPOperator * A = new RAPOperator(Jac,InverseGram, B);
 	
 
-//	BlockOperator *A = new BlockOperator(offsets,offsets);
-//	/* diagonal */
-//	A->SetBlock(0,0,matA00);
-//	A->SetBlock(1,1,matA11);
-//	A->SetBlock(2,2,matA22);
-//	A->SetBlock(3,3,matA33);
-//
-//	/* offdiagonal */
-//	A->SetBlock(0,1,matA01);
-//	A->SetBlock(1,0,matA01->Transpose() );
-//	A->SetBlock(0,2,matA02);
-//	A->SetBlock(2,0,matA02->Transpose() );
-//	A->SetBlock(0,3,matA03);
-//	A->SetBlock(3,0,matA03->Transpose() );
-//
-//	A->SetBlock(1,3,matA13);
-//	A->SetBlock(3,1,matA13->Transpose() );
+	BlockOperator *A = new BlockOperator(offsets,offsets);
+	/* diagonal */
+	A->SetBlock(0,0,matAL00);
+	A->SetBlock(1,1,matAL11);
+	A->SetBlock(2,2,matAL22);
+	A->SetBlock(3,3,matAL33);
+
+	/* offdiagonal */
+	A->SetBlock(0,1,matAL01);
+	A->SetBlock(1,0,matAL01->Transpose() );
+	A->SetBlock(0,2,matAL02);
+	A->SetBlock(2,0,matAL02->Transpose() );
+	A->SetBlock(0,3,matAL03);
+	A->SetBlock(3,0,matAL03->Transpose() );
+
+	A->SetBlock(1,3,matAL13);
+	A->SetBlock(3,1,matAL13->Transpose() );
 
 	/**************************************************/
 	/* calculate right hand side b = B^T G^-1 F */
@@ -729,46 +729,46 @@ int main(int argc, char *argv[])
 	   }
 	   else{
 //		    PetscPCGSolver * pcg = new PetscPCGSolver(MPI_COMM_WORLD);
-//////		    PetscPreconditionerFactory *J_factory=NULL;
-//////			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
-//////
-//////		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
-//////		    petsc_newton->SetOperator( *reduced_system_operator );
-//////			if(use_factory){
-//////				petsc_newton->SetPreconditionerFactory(J_factory);
-//////			}
-//////		    petsc_newton->SetRelTol(1e-9);
-//////		   	petsc_newton->SetAbsTol(0.);
-//////			petsc_newton->SetMaxIter(250000);
-//////			petsc_newton->SetPrintLevel(1);
-//////
-//////			SNES pn_snes(*petsc_newton);
-////////			SNESSetType(pn_snes,SNESNRICHARDSON);
-//////
-////////			SNESSetTolerances(SNES snes,PetscReal abstol,PetscReal rtol,PetscReal stol,PetscInt maxit,PetscInt maxf)
-////////			SNESSetTolerances(pn_snes,PETSC_DEFAULT,1e-5,PETSC_DEFAULT,50000,50000);
-//////
-////////			SNESLineSearch linesearch;
-////////			SNESGetLineSearch(pn_snes, &linesearch);
-////////			SNESLineSearchSetType(linesearch,SNESLINESEARCHL2);
-//////
-//////			KSP pn_ksp; 
-//////			SNESGetKSP(pn_snes,&pn_ksp);
-//////			KSPSetType(pn_ksp,KSPCG);
-//////
-////////			PC pn_pc;
-////////			KSPGetPC(pn_ksp,&pn_pc);
-////////			PCSetType(pn_pc,PCJACOBI);
-//////
-////////			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
-////////			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
-//////
-//////
-////////		    petsc_newton->Mult(b,x);
-//////
-//////			Vector bb;
-//////		    petsc_newton->Mult(bb,x);
-//////
+		    PetscPreconditionerFactory *J_factory=NULL;
+			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
+
+		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
+		    petsc_newton->SetOperator( *reduced_system_operator );
+			if(use_factory){
+				petsc_newton->SetPreconditionerFactory(J_factory);
+			}
+		    petsc_newton->SetRelTol(1e-9);
+		   	petsc_newton->SetAbsTol(0.);
+			petsc_newton->SetMaxIter(250000);
+			petsc_newton->SetPrintLevel(1);
+
+			SNES pn_snes(*petsc_newton);
+//			SNESSetType(pn_snes,SNESNRICHARDSON);
+
+//			SNESSetTolerances(SNES snes,PetscReal abstol,PetscReal rtol,PetscReal stol,PetscInt maxit,PetscInt maxf)
+//			SNESSetTolerances(pn_snes,PETSC_DEFAULT,1e-5,PETSC_DEFAULT,50000,50000);
+
+//			SNESLineSearch linesearch;
+//			SNESGetLineSearch(pn_snes, &linesearch);
+//			SNESLineSearchSetType(linesearch,SNESLINESEARCHL2);
+
+			KSP pn_ksp; 
+			SNESGetKSP(pn_snes,&pn_ksp);
+			KSPSetType(pn_ksp,KSPCG);
+
+//			PC pn_pc;
+//			KSPGetPC(pn_ksp,&pn_pc);
+//			PCSetType(pn_pc,PCJACOBI);
+
+//			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
+//			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
+
+
+//		    petsc_newton->Mult(b,x);
+
+			Vector bb;
+		    petsc_newton->Mult(bb,x);
+
 	   }
 	   timer.Stop();
 	   if(myid==0){
@@ -944,32 +944,6 @@ int main(int argc, char *argv[])
 
 
 /* define the source term on the right hand side */
-// The right hand side
-double f_exact(const Vector & x){
-	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
-
-		 if(sol_opt == 0){
-			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-					-xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
-		 }
-		 else if( (sol_opt == 1) || (sol_opt == 2) ){
-			 // r^2/r
-			return -x(0);
-		 }
-		 else{
-			return 0;
-		 }
-	}
-	else{
-		return 0;
-	}
-
-}
-
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
@@ -1008,6 +982,34 @@ double u_exact(const Vector & x){
 	}
 
 }
+
+// The right hand side
+double f_exact(const Vector & x){
+	if(x.Size() == 2){
+		 double xi(x(0) );
+		 double yi(x(1) );
+
+		 if(sol_opt == 0){
+			 return  -12. *M_PI * cos(4.*M_PI * xi) 
+				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
+					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
+					-xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+		 }
+		 else if( (sol_opt == 1) || (sol_opt == 2) ){
+			 // r^2/r
+			return -x(0) 
+				   -u_exact(x);
+		 }
+		 else{
+			return 0;
+		 }
+	}
+	else{
+		return 0;
+	}
+
+}
+
 
 /* exact q = - 1/r grad u */
 void q_exact(const Vector & x,Vector & q){

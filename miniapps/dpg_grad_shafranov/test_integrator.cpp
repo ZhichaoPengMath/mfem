@@ -1,15 +1,88 @@
 #include "mfem.hpp"
+#include "petsc.h"
 #include "nonlinear_gs_integrator.hpp"
 #include "test_RHSCoefficient.hpp"
 #include <fstream>
 #include <iostream>
+#include <memory>
 
 using namespace mfem;
 using namespace std;
 
+/* test the linear form F_j(u) = (f(u),v_j) */
 double u_exact(const Vector &x);
 double f_exact(const Vector &x);
 double f(double u);
+
+/* test the Jacobian dF(u)/du, and try the nonlinear newton solver in mfem */
+class MyNonlinearOperator: public Operator
+{
+private:
+	ParFiniteElementSpace * fespace;
+	mutable Operator * Jac;
+//	mutable HypreParMatrix * Jac;
+
+public:
+	MyNonlinearOperator(ParFiniteElementSpace *_fespace):
+		fespace(_fespace),Jac(NULL){};
+
+	MyNonlinearOperator(ParFiniteElementSpace *_fespace, HypreParMatrix * _Jac):
+		fespace(_fespace),Jac(_Jac){};
+
+
+	virtual void Mult(const Vector &x, Vector &y) const;
+
+	virtual Operator &GetGradient(const Vector &x) const;
+	
+	virtual ~MyNonlinearOperator()
+	{
+		delete Jac;	
+	}
+
+};
+
+
+void MyNonlinearOperator::Mult(const Vector &x, Vector &y) const
+{
+	Vector FU(x.Size() );
+	ParGridFunction u_now;
+	Vector u_vec(x.GetData(), x.Size() );
+	u_now.MakeTRef(fespace, u_vec, 0);
+	u_now.SetFromTrueVector();
+
+	RHSCoefficient2 fu_coeff( &u_now );
+	ParLinearForm * fu_mass = new ParLinearForm(fespace);
+	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coeff) );
+	fu_mass->Assemble();
+	fu_mass->ParallelAssemble(FU);
+	y = FU;
+	delete fu_mass;
+}
+
+Operator &MyNonlinearOperator::GetGradient(const Vector &x) const
+{
+//	delete Jac;
+	ParGridFunction u_now;
+	Vector u_vec(x.GetData(), x.Size() );
+	u_now.MakeTRef(fespace, u_vec, 0);
+	u_now.SetFromTrueVector();
+	DFDUCoefficient dfu_coeff( &u_now );
+
+//	ParBilinearForm * bfu_mass = new ParBilinearForm(fespace, fespace);
+//	bfu_mass->AddDomainIntegrator( new MixedScalarMassIntegrator() );
+
+	ParBilinearForm * bfu_mass = new ParBilinearForm(fespace);
+	bfu_mass->AddDomainIntegrator( new MassIntegrator(dfu_coeff) );
+	bfu_mass->Assemble();
+	bfu_mass->Finalize();
+	Jac  = bfu_mass->ParallelAssemble();
+
+	delete bfu_mass;
+
+	cout<<"hehe"<<endl;
+	return *Jac;
+	cout<<"hehe"<<endl;
+}
 
 int main(int argc, char * argv[])
 {
@@ -128,7 +201,6 @@ int main(int argc, char * argv[])
    FunctionCoefficient fu_coefficient(f_exact);
 
    u.ProjectCoefficient(u_coefficient);
-   fu.ProjectCoefficient(fu_coefficient);
 
    /* define Bilinear forms */
    ParBilinearForm * mass_u = new ParBilinearForm(fespace);
@@ -136,22 +208,6 @@ int main(int argc, char * argv[])
    mass_u->Assemble();
    mass_u->Finalize();
    HypreParMatrix * mat_m = mass_u->ParallelAssemble();
-
-   ParBilinearForm * mass_fu = new ParBilinearForm(fespace);
-   mass_fu->AddDomainIntegrator( new FUIntegrator( u_coefficient, &f ) );
-   mass_fu->Assemble();
-   mass_fu->Finalize();
-   HypreParMatrix * mat_mf = mass_fu->ParallelAssemble();
-
-
-   Vector MF_U(FU.Size() );
-   Vector M_FU(FU.Size() );
-
-   mat_mf->Mult(u, MF_U);
-   mat_m->Mult(fu, M_FU);
-
-   Vector diff(FU.Size() );
-   subtract(MF_U,M_FU,diff);
 
    /* linearform */
    u.ProjectCoefficient(u_coefficient);
@@ -162,19 +218,7 @@ int main(int argc, char * argv[])
    Vector LF_U(FU.Size() );
    lf_u->ParallelAssemble( LF_U );
 
-
-//   for(int i = 0;i<u.Size();i++){
-//		cout<<i<<": "<<"u "<<u(i)<<" fu "<<fu(i)<<endl
-//		       <<"  "<<"U "<<U(i)<<" FU "<<FU(i)<<endl
-//			   <<endl;
-//   }
-//
-//   for(int i = 0;i<res1.Size();i++){
-//		cout<<i<<": "<<"MF*u "<<res1(i)<<" M*fu "<<res2(i)<<endl;
-//   }
-
-   // 14. LinearSolve 
-//   GMRESSolver  pcg(MPI_COMM_WORLD);
+   // 7. LinearSolve 
    CGSolver  pcg(MPI_COMM_WORLD);
    pcg.SetOperator(*mat_m);
    HypreBoomerAMG * prec = new HypreBoomerAMG(*mat_m);
@@ -185,7 +229,6 @@ int main(int argc, char * argv[])
    pcg.SetPrintLevel(1);
    FU = 0.;
    pcg.Mult(LF_U,FU);
-//   pcg.Mult(MF_U,FU);
 
    fu.Distribute(FU);
 
@@ -193,10 +236,8 @@ int main(int argc, char * argv[])
    if(myid == 0){
 		printf("\n|| fu_h - f(u) ||_{L^2} = %e \n",error_l2);
 	}
-   printf("rank %d difference: %e\n",myid,diff.Norml2() );
 
-   /* plot */
-   // 15. Save the refined mesh and the solution in parallel. This output can
+   // 8.  Save the refined mesh and the solution in parallel. This output can
    //     be viewed later using GLVis: "glvis -np <np> -m mesh -g sol".
    {
       ostringstream mesh_name, sol_name;
@@ -212,8 +253,7 @@ int main(int argc, char * argv[])
       u.Save(sol_ofs);
    }
 
-   // 16. Send the solution by socket to a GLVis server.
-//   fu.ProjectCoefficient(fu_coefficient);
+   // 9. Send the solution by socket to a GLVis server.
    if (visualization)
    {
       char vishost[] = "localhost";
@@ -224,13 +264,55 @@ int main(int argc, char * argv[])
       sol_sock << "solution\n" << *mesh << fu << flush;
    }
     
+   // 10. test Jacobian
+
+   DFDUCoefficient dfu_coeff( &u );
+
+   ParBilinearForm * bfu_mass = new ParBilinearForm(fespace);
+   bfu_mass->AddDomainIntegrator( new MassIntegrator(dfu_coeff) );
+   bfu_mass->Assemble();
+   bfu_mass->Finalize();
+   HypreParMatrix * Jac  = bfu_mass->ParallelAssemble();
+   MyNonlinearOperator * A = new MyNonlinearOperator(fespace,Jac);
+
+   NewtonSolver newton(MPI_COMM_WORLD);
+   newton.SetOperator(*A);
+
+   MINRESSolver solver(MPI_COMM_WORLD);
+   HypreSmoother nprec; 
+   nprec.SetType(HypreSmoother::Jacobi);
+   solver.SetPreconditioner(nprec);
+   solver.SetAbsTol(0.0);
+   solver.SetRelTol(1e-12);
+   solver.SetMaxIter(200);
+
+   newton.SetSolver(solver);
+   newton.SetPrintLevel(1); // print Newton iterations
+   newton.SetRelTol(1e-9);
+   newton.SetAbsTol(0.0);
+   newton.SetMaxIter(200);
+
+   Vector Zero(FU.Size() );
+   Zero = 0.;
+   U = 0.;
+   cout<<"haha"<<endl;
+   newton.Mult(Zero, U);
+
+   u.Distribute(U);
+   error_l2 = u.ComputeL2Error(u_coefficient);
+   if(myid == 0){
+		printf("\n|| u_h - u ||_{L^2} = %e \n",error_l2);
+	}
+   
+   
+
    /* finalize the code */
    delete mass_u;
-   delete mass_fu;
-   delete mat_mf;
    delete mat_m;
    delete fespace;
    delete mesh;
+
+   delete A;
    MPI_Finalize();
 
 
@@ -240,8 +322,6 @@ double u_exact(const Vector &x)
 {
 	if(x.Size() == 2){
 		return sin(4*M_PI*x(0) )*sin(4*M_PI*x(1) );
-//		return 1;
-		return x(0)*x(1);
 	}
 	else{
 		return 0.;
@@ -265,5 +345,4 @@ double f_exact(const Vector &x)
 		return 0.;
 	}
 }
-
 
