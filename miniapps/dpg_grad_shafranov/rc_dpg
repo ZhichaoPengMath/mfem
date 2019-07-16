@@ -8,8 +8,8 @@
 #-ksp_rtol 1e-20
 
 -snes_mf_operator
-#-snes_type newtontr
--snes_type newtonls
+-snes_type newtontr
+#-snes_type newtonls
 #-snes_type nrichardson
 
 #-snes_ksp_ew_conv  # a flag for inexact newton
@@ -60,7 +60,7 @@
 -s2_ksp_rtol 1e-3
 #-s2_ksp_atol 1e-6
 
--s2_ksp_max_it 15
+#-s2_ksp_max_it 15
 
 
 -s2_pc_type sor # perform better for sol_opt 0

@@ -5,6 +5,16 @@
 -ksp_monitor
 -ksp_view
 
+-ksp_type fgmres
+-ksp_gmres_restart 75 # longer restrat better convergence and slower speed
+#-ksp_gmres_restart 50
+#-ksp_gmres_restart 30
+-ksp_gmres_modifiedgramschmidt # more stable but a bit slower
+
+#-ksp_gmres_cgs_refinement_type refine_ifneeded # help the solver to convrege, but also make it a bit slower
+#-ksp_gmres_cgs_refinement_type refine_always # help the solver to convrege, but also make it a bit slower
+#<refine_never,refine_ifneeded,refine_always>
+
 #-ksp_rtol 1e-20
 
 -snes_mf_operator
@@ -62,7 +72,7 @@
 -s2_ksp_rtol 1e-3
 #-s2_ksp_atol 1e-6
 
--s2_ksp_max_it 15
+#-s2_ksp_max_it 15
 
 
 #-s2_pc_type sor # perform better for sol_opt 0
@@ -112,8 +122,9 @@
 
 #-s2_pc_type asm # additive Schwartz, bad
 
+-s2_ksp_type fcg
+#-s2_ksp_type cg
 #-s2_ksp_type gmres
--s2_ksp_type cg
 #-s2_ksp_type minres
 #-s2_ksp_type preonly
 

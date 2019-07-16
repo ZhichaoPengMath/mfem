@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
    bool q_vis_error = false;
    int ref_levels = -1;
    int gradgrad_opt = 0;
-   int solver_print_opt = 0;
+   int solver_print_opt = 1;
    int h1_trace_opt = 0;/* use lower order h1_trace term */
    int rt_trace_opt = 0;/* use lower order rt_trace term */
 
@@ -580,7 +580,7 @@ int main(int argc, char *argv[])
 	 	InverseGram.Mult(F,IGF);
 	 	Jac_rhs->MultTranspose(IGF,b);
 
-		F_rec = F;
+//		F_rec = F;
 
 		F = 0.;
 	}
@@ -763,7 +763,20 @@ int main(int argc, char *argv[])
 
 			KSP pn_ksp; 
 			SNESGetKSP(pn_snes,&pn_ksp);
-			KSPSetType(pn_ksp,KSPCG);
+			KSPSetType(pn_ksp,KSPFGMRES); /* fast */
+//			KSPSetType(pn_ksp,KSPPIPEFGMRES); /* fast */
+
+//			KSPSetType(pn_ksp,KSPDGMRES);
+//			KSPSetType(pn_ksp,KSPLGMRES); 
+//			KSPSetType(pn_ksp,KSPGMRES);
+//			KSPSetType(pn_ksp,KSPPGMRES); /* slow */
+
+			/* not convergent */
+//			KSPSetType(pn_ksp,KSPTFQMR);
+//			KSPSetType(pn_ksp,KSPTCQMR);
+//			KSPSetType(pn_ksp,KSPCGS);
+//			KSPSetType(pn_ksp,KSPBCGS);
+//			KSPSetType(pn_ksp,KSPCG);
 
 //			PC pn_pc;
 //			KSPGetPC(pn_ksp,&pn_pc);
@@ -775,6 +788,7 @@ int main(int argc, char *argv[])
 
 //		    petsc_newton->Mult(b,x);
 
+//			x = 1.;
 			Vector bb;
 		    petsc_newton->Mult(bb,x);
 
@@ -785,6 +799,8 @@ int main(int argc, char *argv[])
 	   }
 
 	   {
+		  f_div->ParallelAssemble( F_rec.GetBlock(1) );
+
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);
 
@@ -1025,12 +1041,17 @@ double f_exact(const Vector & x){
 			 return  -12. *M_PI * cos(4.*M_PI * xi) 
 				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
 					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
+				    -u_exact(x) + 0.01*exp( -u_exact(x) );
 					-u_exact(x);
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r
 			return -x(0) 
+				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
+//				   +0.5*exp( -u_exact(x) );
+//				   -u_exact(x) + exp( -u_exact(x) );
 				   -u_exact(x);
+//				   +exp( -u_exact(x) );
 		 }
 		 else{
 			return 0;

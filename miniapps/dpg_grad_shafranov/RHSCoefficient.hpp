@@ -31,7 +31,11 @@ namespace mfem
 
 		double uip = u->GetValue(T.ElementNo,ip);
 
+		return uip - 0.5*uip*uip;
+		return - 0.5*exp(-uip);
+		return uip - exp(-uip);
 		return uip;
+//		return exp(-uip);
 //		return  uip - xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi )
 //				-12. *M_PI * cos(4.*M_PI * xi) 
 //		        +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
@@ -65,6 +69,11 @@ namespace mfem
 
 		double uip = u->GetValue(T.ElementNo,ip);
 
+		return 1 - uip;
+//		return 0.5*exp(-uip);
+//		return 1+exp(-uip);
+//		return 1+0.1*exp(-uip);
+//		return exp(-uip);
 		return 1;
 	}
 
