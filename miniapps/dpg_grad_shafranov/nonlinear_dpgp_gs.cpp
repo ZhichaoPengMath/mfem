@@ -695,7 +695,9 @@ int main(int argc, char *argv[])
 //	   Shatinv->SetPrintLevel(1);
 	
 	   /* 9b pass all the pointer to the infomration interfce */
-	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(u0_space, q0_space, uhat_space, qhat_space,
+	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(
+												&use_petsc,
+												u0_space, q0_space, uhat_space, qhat_space,
 												vtest_space, stest_space,
 												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
 												matB_q_jump, matVinv, matSinv,

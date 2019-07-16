@@ -58,6 +58,7 @@ void DFDUOperator::Mult(const Vector &x, Vector &y) const
 class ReducedSystemOperator : public Operator
 { 
 private:
+	bool * use_petsc;
 	/****************************************
 	 * pointers to the trial spaces
 	 *  u0_space: interior u, L2
@@ -162,6 +163,7 @@ private:
 
 public:
 	ReducedSystemOperator(
+			bool * _use_petsc,
 			ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 			ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
 //			ParMixedBilinearForm  * _B_mass_q, ParMixedBilinearForm * _B_u_dot_div, ParMixedBilinearForm * _B_u_normal_jump,
@@ -202,6 +204,7 @@ public:
  *  Pass the pointers, initialization
  *******************************************************/
 ReducedSystemOperator::ReducedSystemOperator(
+	bool * _use_petsc,
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
 //	ParMixedBilinearForm  * _B_mass_q, ParMixedBilinearForm * _B_u_dot_div, ParMixedBilinearForm * _B_u_normal_jump,
@@ -246,6 +249,7 @@ ReducedSystemOperator::ReducedSystemOperator(
 	F(_F),
 	Jacobian(NULL),
 	NDfDu(NULL),
+	use_petsc(_use_petsc),
     fu(offsets_test[2] - offsets_test[1] ){}
 /******************************************************
  *  Update NDfDu = DF(u)/Du
@@ -288,7 +292,7 @@ void ReducedSystemOperator::UpdateJac(const Vector &x) const
 //	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
 //	mass_u->Assemble();
 //	mass_u->Finalize();
-//	mass_u->SpMat() *= -1.;
+//////	mass_u->SpMat() *= -1.;
 //
 ////	NDfDu = mass_u->SpMat();
 //	NDfDu = mass_u->ParallelAssemble();
@@ -333,10 +337,12 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 
 	fu_mass->ParallelAssemble(F1); delete fu_mass;
 	/* update linear source part */
-	Vector F2( F1.Size() );
-    f_div->ParallelAssemble( F2 );
+	if(*use_petsc){
+		Vector F2( F1.Size() );
+    	f_div->ParallelAssemble( F2 );
 
-	F1 += F2;
+		F1 += F2;
+	}
 
     BlockVector rhs(offsets); 
     rhs=0.;
