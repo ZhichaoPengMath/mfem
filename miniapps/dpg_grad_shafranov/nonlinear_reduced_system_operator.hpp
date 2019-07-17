@@ -1,6 +1,7 @@
 #include "mfem.hpp"
 #include "petsc.h"
 #include "RHSCoefficient.hpp"
+#include "SourceAndBoundary.hpp"
 #include <iostream>
 #include <fstream>
 
@@ -24,34 +25,6 @@
 
 using namespace std;
 using namespace mfem;
-
-class DFDUOperator : public Operator
-{
-private:
-	ParFiniteElementSpace * u0_space, * stest_space;
-public:
-	DFDUOperator(ParFiniteElementSpace * _u0_space, ParFiniteElementSpace* _stest_space):
-		u0_space(_u0_space), stest_space(_stest_space){};
-	
-	virtual void Mult( const Vector &x, Vector &y) const;  
-};
-
-void DFDUOperator::Mult(const Vector &x, Vector &y) const
-{
-    ParGridFunction u0_now;
-
-	Vector u0_vec(x.GetData(), x.Size() );
-    u0_now.MakeTRef(u0_space,u0_vec , 0);
-	u0_now.SetFromTrueVector();
-    DFDUCoefficient fu_coefficient( &u0_now );
-
-	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
-	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
-	fu_mass->Assemble();
-
-	fu_mass->ParallelAssemble(y);
-	delete fu_mass;
-}
 
 
 /**********************************************************/
@@ -110,9 +83,7 @@ private:
 	Vector &F;
 //	Operator * A;
 
-//    mutable HypreParMatrix * NDfDu;
 	mutable HypreParMatrix * NDfDu;
-//	mutable Operator * NDfDu;
 	mutable BlockOperator * Jac;
 	/**********************************
 	 * Operator A = Jac^T G^-1 Jac 
@@ -149,7 +120,7 @@ private:
 	/*********************************
 	 * linear operator for the right hand side
 	 *********************************/
-    ParLinearForm * f_div;	
+    ParLinearForm * linear_source_operator;	
 
 	/*******************************
 	 * essential vdof for boundary condition
@@ -183,7 +154,7 @@ public:
 			const Array<int> &_ess_trace_vdof_list,
 			Vector *_b,
 			Vector &_F,
-			ParLinearForm * _f_div
+			ParLinearForm * _linear_source_operator
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
 	virtual void UpdateNDFDU(const Vector &x) const;
@@ -207,8 +178,6 @@ ReducedSystemOperator::ReducedSystemOperator(
 	bool * _use_petsc,
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
-//	ParMixedBilinearForm  * _B_mass_q, ParMixedBilinearForm * _B_u_dot_div, ParMixedBilinearForm * _B_u_normal_jump,
-//	ParMixedBilinearForm  * _B_q_weak_div, ParMixedBilinearForm * _B_q_jump, ParBilinearForm * _Vinv, ParBilinearForm * _Sinv,
 	HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
@@ -223,13 +192,11 @@ ReducedSystemOperator::ReducedSystemOperator(
 	const Array<int> &_ess_trace_vdof_list,
 	Vector *_b,
 	Vector &_F,
-	ParLinearForm * _f_div
+	ParLinearForm * _linear_source_operator
 	):
 	Operator( _A->Width(), _A->Height() ), /* size of operator, important !!! */
 	u0_space(_u0_space), q0_space(_q0_space), uhat_space(_uhat_space), qhat_space(_qhat_space),
 	vtest_space(_vtest_space), stest_space(_stest_space),
-//	B_mass_q(_B_mass_q),  B_u_dot_div(_B_u_dot_div), B_u_normal_jump(_B_u_normal_jump),
-//	B_q_weak_div(_B_q_weak_div), B_q_jump(_B_q_jump), Vinv(_Vinv), Sinv(_Sinv),
 	matB_mass_q(_matB_mass_q), matB_u_normal_jump(_matB_u_normal_jump), matB_q_weak_div(_matB_q_weak_div),
 	matB_q_jump(_matB_q_jump), matVinv(_matVinv), matSinv(_matSinv), 
 	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
@@ -244,7 +211,7 @@ ReducedSystemOperator::ReducedSystemOperator(
 	Jac(_Jac),
 	Ginv(_Ginv),
 	ess_trace_vdof_list(_ess_trace_vdof_list),
-	f_div(_f_div),
+	linear_source_operator(_linear_source_operator),
 	b(_b),
 	F(_F),
 	Jacobian(NULL),
@@ -263,7 +230,8 @@ void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 	Vector u0_vec(x.GetData(), x.Size() );
     u0_now.MakeTRef(u0_space,u0_vec , 0);
 	u0_now.SetFromTrueVector();
-    DFDUCoefficient dfu_coefficient( &u0_now );
+//    DFDUCoefficient dfu_coefficient( &u0_now );
+    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
 
 	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
 	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
@@ -281,23 +249,6 @@ void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 void ReducedSystemOperator::UpdateJac(const Vector &x) const
 {
 	/* calculate df(u)/du  */
-//    ParGridFunction u0_now;
-//
-//	Vector u0_vec(x.GetData(), x.Size() );
-//    u0_now.MakeTRef(u0_space,u0_vec , 0);
-//	u0_now.SetFromTrueVector();
-//    DFDUCoefficient dfu_coefficient( &u0_now );
-//
-//	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
-//	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
-//	mass_u->Assemble();
-//	mass_u->Finalize();
-//////	mass_u->SpMat() *= -1.;
-//
-////	NDfDu = mass_u->SpMat();
-//	NDfDu = mass_u->ParallelAssemble();
-//	delete mass_u;
-
 //	UpdateNDFDU(x);
 
 	Jac->SetBlock(1,1,NDfDu );
@@ -319,8 +270,6 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 //	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*Jac);
 	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*B);
 	oper->Mult(x,y);
-    
-
 
 	/* update -(f(u),v) part */
     Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
@@ -329,20 +278,22 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     u0_now.MakeTRef(u0_space, u0_vec, 0);
 	u0_now.SetFromTrueVector();
-    RHSCoefficient fu_coefficient( &u0_now );
+//    RHSCoefficient fu_coefficient( &u0_now );
+    FUCoefficient fu_coefficient( &u0_now, &nonlinear_source );
 
 	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
 	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
 	fu_mass->Assemble();
 
 	fu_mass->ParallelAssemble(F1); delete fu_mass;
+
 	/* update linear source part */
-	if(*use_petsc){
+//	if(*use_petsc){
 		Vector F2( F1.Size() );
-    	f_div->ParallelAssemble( F2 );
+    	linear_source_operator->ParallelAssemble( F2 );
 
 		F1 += F2;
-	}
+//	}
 
     BlockVector rhs(offsets); 
     rhs=0.;

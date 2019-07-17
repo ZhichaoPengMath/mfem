@@ -7,13 +7,12 @@
 using namespace std;
 using namespace mfem;
 
-double f_exact(const Vector & x);
-double u_exact(const Vector & x);
-double r_exact(const Vector & x);
+/* r_exact = r */
+double r_exact(const Vector & x){
+	return x(0);
+}
 void  zero_fun(const Vector & x, Vector & f);
-void  q_exact(const Vector & x, Vector & f);
 
-int sol_opt = 0;
 
 
 int main(int argc, char *argv[])
@@ -313,7 +312,7 @@ int main(int argc, char *argv[])
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
 
-   FunctionCoefficient f_coeff( f_exact );/* coefficients */
+   FunctionCoefficient f_coeff( linear_source );/* coefficients */
    ParLinearForm * f_div(new ParLinearForm(stest_space) );
 //   f_div->Update(stest_space, F.GetBlock(1) ,0);
    f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
@@ -496,18 +495,6 @@ int main(int argc, char *argv[])
 
 	HypreParMatrix * matAL33 = RAP( matVinv, matB_u_normal_jump);
 
-	/* (u,v) */
-	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
-	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator() );
-	mass_u->Assemble();
-	mass_u->Finalize();
-	mass_u->SpMat() *= -1.;
-
-	HypreParMatrix * matMassU = mass_u->ParallelAssemble();
-	delete mass_u;
-
-
-
 	BlockOperator B(offsets_test, offsets);
 
 	B.SetBlock(0, q0_var  ,matB_mass_q);
@@ -516,9 +503,17 @@ int main(int argc, char *argv[])
 	
 	B.SetBlock(1, q0_var   ,matB_q_weak_div);
 	B.SetBlock(1, qhat_var ,matB_q_jump);
-//	B.SetBlock(1, u0_var, matMassU);
 
 
+	/*********************************************
+	 * allocate memory to store 
+	 * Jac =  mass_q	 -u_dot_div  0		u_normal_jump
+	 *        q_weak_div -df/du      q_jump 0
+	 *	   = B - DF/DU
+	 * Now, we only allocate memory and set 
+	 * df/du = 0, and df/du block will be updated
+	 * during the nonlinear solve step
+	 * *******************************************/
 	BlockOperator Jac(offsets_test,offsets);
 
 	Jac.SetBlock(0, q0_var  ,matB_mass_q);
@@ -527,32 +522,21 @@ int main(int argc, char *argv[])
 	
 	Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
 	Jac.SetBlock(1, qhat_var ,matB_q_jump);
-//	Jac.SetBlock(1, u0_var, matMassU);
-
-	BlockOperator * Jac_rhs = NULL;
-	if(!use_petsc){
-		Jac_rhs = new BlockOperator(offsets_test,offsets);
-
-		Jac_rhs->SetBlock(0, q0_var  ,matB_mass_q);
-		Jac_rhs->SetBlock(0, u0_var  ,matB_u_dot_div);
-		Jac_rhs->SetBlock(0, uhat_var,matB_u_normal_jump);
-		        
-		Jac_rhs->SetBlock(1, q0_var   ,matB_q_weak_div);
-		Jac_rhs->SetBlock(1, qhat_var ,matB_q_jump);
-		Jac_rhs->SetBlock(1, u0_var, matMassU);
-
-	}
 
 	
 	BlockOperator InverseGram(offsets_test, offsets_test);
 	InverseGram.SetBlock(0,0,matVinv);
 	InverseGram.SetBlock(1,1,matSinv);
 	
-//	RAPOperator * A = new RAPOperator(B,InverseGram,B );
-//	RAPOperator * A = new RAPOperator(Jac,InverseGram, Jac);
-//	RAPOperator * A = new RAPOperator(Jac,InverseGram, B);
-	
-
+	/***************************************************
+	 * allocate memory to store A = Jac^T G^-1 Jac,
+	 * A = AL + AN, 
+	 * where AL = B^T G^-1 B is the linear part and
+	 * AN is the nonlinear part depneding on df/du.
+	 * Here, initially, we assemble the small blocks for 
+	 * AL and store them. The nonlinear part AN will be 
+	 * updated during the nonlinear solve step.
+	 * *************************************************/
 	BlockOperator *A = new BlockOperator(offsets,offsets);
 	/* diagonal */
 	A->SetBlock(0,0,matAL00);
@@ -571,44 +555,30 @@ int main(int argc, char *argv[])
 	A->SetBlock(1,3,matAL13);
 	A->SetBlock(3,1,matAL13->Transpose() );
 
-	/**************************************************/
-	/* calculate right hand side b = B^T G^-1 F */
-	if(!use_petsc)
-	{
-	    f_div->ParallelAssemble( F.GetBlock(1) );
-	    BlockVector IGF(offsets_test);
-	 	InverseGram.Mult(F,IGF);
-	 	Jac_rhs->MultTranspose(IGF,b);
-
-//		F_rec = F;
-
-		F = 0.;
-	}
-	    
-	   // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
-	   //   We use the "Jacobian" preconditionner
-	   //
-	   //   V0
-	   //			S0 
-	   //					Vhat
-	   //							Shat
-	   //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
-	   //
-	   //  Actually, the exact blocks are
-	   //		V0 = B_q_weak_div^T S^-1 B_q_weak_div
-	   //		    +Mass_q^T  V^-1  Mass_q
-	   //
-	   //		S0 = u_dot_div^T  S^-1  u_dot_div
-	   //
-	   //       Vhat = q_jump^T S^-1 q_jump.
-	   //  
-	   //       Shat = u_normal_jump^T V^-1 u_normal_jump
-	   //
-	   //       One interesting fact:
-	   //			V0 \approx Mass
-	   //			S0 \approx Mass
-	   //
-	   // We want to approximate them.
+	// 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
+	//   We use the "Jacobian" preconditionner
+	//
+	//   V0
+	//			S0 
+	//					Vhat
+	//							Shat
+	//    corresponding to the primal (x0) and interfacial (xhat) unknowns.
+	//
+	//  Actually, the exact blocks are
+	//		V0 = B_q_weak_div^T S^-1 B_q_weak_div
+	//		    +Mass_q^T  V^-1  Mass_q
+	//
+	//		S0 = u_dot_div^T  S^-1  u_dot_div
+	//
+	//       Vhat = q_jump^T S^-1 q_jump.
+	//  
+	//       Shat = u_normal_jump^T V^-1 u_normal_jump
+	//
+	//       One interesting fact:
+	//			V0 \approx Mass
+	//			S0 \approx Mass
+	//
+	// We want to approximate them.
 	/***************************************************************/
 	   ParBilinearForm *S0 = new ParBilinearForm(u0_space);
 	   S0->AddDomainIntegrator(new MassIntegrator() );
@@ -692,9 +662,12 @@ int main(int argc, char *argv[])
 	      P.SetDiagonalBlock(3, Shatinv2);
 	   }
 
-//	   Shatinv->SetPrintLevel(1);
 	
-	   /* 9b pass all the pointer to the infomration interfce */
+	   /*******************************************************************************
+		* 9b pass all the pointer to the infomration interfce,
+		* everything is passed to PETSC by ReducedSystemOperator,
+		* Jac and A is updated throught the ReducedSystemOperator
+		* ******************************************************************************/
 	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(
 												&use_petsc,
 												u0_space, q0_space, uhat_space, qhat_space,
@@ -715,29 +688,18 @@ int main(int argc, char *argv[])
 												f_div
 			   );
 
-//
-//	// 10. Solve the normal equation system using the PCG iterative solver.
-//	//     Check the weighted norm of residual for the DPG least square problem.
-//	//     Wrap the primal variable in a GridFunction for visualization purposes.
+	// 10. Solve the normal equation system using the PCG iterative solver.
+	//     Check the weighted norm of residual for the DPG least square problem.
+	//     Wrap the primal variable in a GridFunction for visualization purposes.
 
 	   StopWatch timer;
 	   timer.Start();
-//	   if(use_petsc){
 	   if(!use_petsc){
-//			GMRESSolver pcg(MPI_COMM_WORLD);
-			CGSolver pcg(MPI_COMM_WORLD);
-//	   		pcg.SetOperator(*A);
-	   		pcg.SetOperator(*reduced_system_operator);
-	   		pcg.SetPreconditioner(P);
-	   		pcg.SetRelTol(1e-9);
-	   		pcg.SetMaxIter(2000);
-	   		pcg.SetPrintLevel(solver_print_opt);
-
-	   		pcg.Mult(b,x);
-	   		MPI_Barrier(MPI_COMM_WORLD);
+		   if(myid == 0){
+				cout<<"Wrong! PETSC is not used!"<<endl<<endl;
+		   }
 	   }
 	   else{
-//		    PetscPCGSolver * pcg = new PetscPCGSolver(MPI_COMM_WORLD);
 		    PetscPreconditionerFactory *J_factory=NULL;
 			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
 
@@ -752,24 +714,6 @@ int main(int argc, char *argv[])
 			petsc_newton->SetPrintLevel(1);
 
 			SNES pn_snes(*petsc_newton);
-//			SNESSetType(pn_snes,SNESNRICHARDSON);
-
-//			SNESSetTolerances(SNES snes,PetscReal abstol,PetscReal rtol,PetscReal stol,PetscInt maxit,PetscInt maxf)
-//			SNESSetTolerances(pn_snes,PETSC_DEFAULT,1e-5,PETSC_DEFAULT,50000,50000);
-
-//			SNESLineSearch linesearch;
-//			SNESGetLineSearch(pn_snes, &linesearch);
-//			SNESLineSearchSetType(linesearch,SNESLINESEARCHL2);
-
-			KSP pn_ksp; 
-			SNESGetKSP(pn_snes,&pn_ksp);
-			KSPSetType(pn_ksp,KSPFGMRES); /* fast */
-//			KSPSetType(pn_ksp,KSPPIPEFGMRES); /* fast */
-
-//			KSPSetType(pn_ksp,KSPDGMRES);
-//			KSPSetType(pn_ksp,KSPLGMRES); 
-//			KSPSetType(pn_ksp,KSPGMRES);
-//			KSPSetType(pn_ksp,KSPPGMRES); /* slow */
 
 			/* not convergent */
 //			KSPSetType(pn_ksp,KSPTFQMR);
@@ -778,17 +722,7 @@ int main(int argc, char *argv[])
 //			KSPSetType(pn_ksp,KSPBCGS);
 //			KSPSetType(pn_ksp,KSPCG);
 
-//			PC pn_pc;
-//			KSPGetPC(pn_ksp,&pn_pc);
-//			PCSetType(pn_pc,PCJACOBI);
-
-//			 KSPSetTolerances(KSP ksp,PetscReal rtol,PetscReal abstol,PetscReal dtol,PetscInt maxits)
-//			KSPSetTolerances(pn_ksp,1e-6,PETSC_DEFAULT,PETSC_DEFAULT,1000);
-
-
-//		    petsc_newton->Mult(b,x);
-
-//			x = 1.;
+			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
 			Vector bb;
 		    petsc_newton->Mult(bb,x);
 
@@ -798,6 +732,11 @@ int main(int argc, char *argv[])
 			cout<<"time: "<<timer.RealTime()<<endl;
 	   }
 
+	   /************************************************
+		* Calculate the residual in the dual norm,
+		* which can be used as an error estimator for 
+		* AMR (Adaptive Mesh Refinement)
+		* **********************************************/
 	   {
 		  f_div->ParallelAssemble( F_rec.GetBlock(1) );
 
@@ -835,9 +774,6 @@ int main(int argc, char *argv[])
 	   u0.Distribute( x.GetBlock(u0_var) );
 	   q0.Distribute( x.GetBlock(q0_var) );
 
-//	   u0.MakeRef( u0_space, x.GetBlock(u0_var) );
-//	   q0.MakeRef( q0_space, x.GetBlock(q0_var) );
-
 	   double u_l2_error = u0.ComputeL2Error(u_coeff);
 	   double q_l2_error = q0.ComputeL2Error(q_coeff);
 
@@ -856,33 +792,17 @@ int main(int argc, char *argv[])
 			cout<<endl;
 	   }
 
-	   /* debug */
-//	   Vector u1(u0),u2(u0);
-//	   ParBilinearForm * mass_mass_u = new ParBilinearForm(u0_space);
-//	   mass_mass_u->AddDomainIntegrator(new MassIntegrator() );
-//	   mass_mass_u->Assemble();
-//	   mass_mass_u->Finalize();
-//
-//	   mass_mass_u->Mult(u0,u1);
-//
-//	   RHSCoefficient rhs_coefficient(&u0);
-//	   ParLinearForm * rhs_test = new ParLinearForm(u0_space);
-//	   rhs_test->AddDomainIntegrator( new DomainLFIntegrator(rhs_coefficient) );
-//	   rhs_test->Assemble();
-//	   rhs_test->ParallelAssemble(u2);
-//
-//	   u2 -=u1;
-//	   cout<<u2.Norml2()<<endl;
 	
 	   // 11. Save the refined mesh and the solution. This output can be viewed
 	   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
-	   ParGridFunction * q_projection = NULL; 
+	   ParGridFunction * q_projection_minus_num = NULL; 
 	   if(q_vis_error){
-		   q_projection = new ParGridFunction(q0_space);
-		   q_projection->ProjectCoefficient(q_coeff);
-		   *q_projection -= q0;
+		   q_projection_minus_num = new ParGridFunction(q0_space);
+		   q_projection_minus_num->ProjectCoefficient(q_coeff);
+		   *q_projection_minus_num -= q0;
 
-		   cout<<q_projection->Normlinf()<<endl;
+			/* linf on each processor */
+//		   cout<<q_projection_minus_num->Normlinf()<<endl;
 	   }
 
 	   {
@@ -910,7 +830,7 @@ int main(int argc, char *argv[])
 	    	 mesh_name<< "q_error."<<setfill('0')<<setw(6)<<myid;
 	         ofstream q_error_variable_ofs(q_error_name.str().c_str() );
 	         q_error_variable_ofs.precision(8);
-	         q_projection->Save(q_error_variable_ofs);
+	         q_projection_minus_num->Save(q_error_variable_ofs);
 		  }
 	   }
 	  
@@ -930,20 +850,21 @@ int main(int argc, char *argv[])
       	  	 q_sock.precision(8);
       	  	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
 		  }
+		  /* plot error picture for q */
 		  if(q_vis_error){
 	         socketstream q_error_sock(vishost, visport);
 			 q_error_sock << "parallel " << num_procs << " " << myid << "\n";
       	  	 q_error_sock.precision(8);
-      	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection << "window_title 'Q_error' "<<endl;
+      	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection_minus_num << "window_title 'Q_error' "<<endl;
 		  }
 	   }
-	   delete q_projection;
+	   delete q_projection_minus_num;
 
 //   // 13. Free the used memory.
 	/* reduced system operator */
    delete reduced_system_operator;
-   /* delete operators */
-   delete Jac_rhs;
+   /* BlockOperators */
+   delete A;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
@@ -993,121 +914,117 @@ int main(int argc, char *argv[])
 
 /* define the source term on the right hand side */
 /* exact solution */
-double u_exact(const Vector & x){
-	if(x.Size() == 2){
-		double xi(x(0) );
-		double yi(x(1) );
-
-		if(sol_opt == 0){
-			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
-		}
-		else if(sol_opt == 1){
-			double d1 =  0.075385029660066;
-			double d2 = -0.206294962187880;
-			double d3 = -0.031433707280533;
-
-			return   1./8.* pow(x(0),4)
-				   + d1
-				   + d2 * x(0)*x(0)
-				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-		}
-		else if(sol_opt == 2){
-			double d1 =  0.015379895031306;
-    		double d2 = -0.322620578214426;
-    		double d3 = -0.024707604384971;
-
-			return   1./8.* pow(x(0),4)
-				   + d1
-				   + d2 * x(0)*x(0)
-				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-		}
-		else{
-			return 0;
-		}	
-	}
-	else{
-		return 0;
-	}
-
-}
+//double u_exact(const Vector & x){
+//	if(x.Size() == 2){
+//		double xi(x(0) );
+//		double yi(x(1) );
+//
+//		if(sol_opt == 0){
+//			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+//		}
+//		else if(sol_opt == 1){
+//			double d1 =  0.075385029660066;
+//			double d2 = -0.206294962187880;
+//			double d3 = -0.031433707280533;
+//
+//			return   1./8.* pow(x(0),4)
+//				   + d1
+//				   + d2 * x(0)*x(0)
+//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+//		}
+//		else if(sol_opt == 2){
+//			double d1 =  0.015379895031306;
+//    		double d2 = -0.322620578214426;
+//    		double d3 = -0.024707604384971;
+//
+//			return   1./8.* pow(x(0),4)
+//				   + d1
+//				   + d2 * x(0)*x(0)
+//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+//		}
+//		else{
+//			return 0;
+//		}	
+//	}
+//	else{
+//		return 0;
+//	}
+//
+//}
 
 // The right hand side
-double f_exact(const Vector & x){
-	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
+//double f_exact(const Vector & x){
+//	if(x.Size() == 2){
+//		 double xi(x(0) );
+//		 double yi(x(1) );
+//
+//		 if(sol_opt == 0){
+//			 return  -12. *M_PI * cos(4.*M_PI * xi) 
+//				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
+//					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
+//				    -u_exact(x) + 0.01*exp( -u_exact(x) );
+//					-u_exact(x);
+//		 }
+//		 else if( (sol_opt == 1) || (sol_opt == 2) ){
+//			 // r^2/r
+//			return -x(0) 
+//				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
+////				   +0.5*exp( -u_exact(x) );
+////				   -u_exact(x) + exp( -u_exact(x) );
+//				   -u_exact(x);
+////				   +exp( -u_exact(x) );
+//		 }
+//		 else{
+//			return 0;
+//		 }
+//	}
+//	else{
+//		return 0;
+//	}
+//
+//}
+//
+//
+///* exact q = - 1/r grad u */
+//void q_exact(const Vector & x,Vector & q){
+//	if(x.Size() == 2){
+//		 double xi(x(0) );
+//		 double yi(x(1) );
+//
+//		 if(sol_opt == 0){
+//			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
+//		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
+//		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
+//		 }
+//		 else if(sol_opt ==1){
+//			double d1 =  0.075385029660066;
+//			double d2 = -0.206294962187880;
+//			double d3 = -0.031433707280533;
+//
+//			q(0) = -1./2. * pow( x(0),2 )
+//				   -d2*2.
+//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+//			q(1) = -d3*( -8.* x(0) * x(1) );
+//		 }
+//		 else if(sol_opt ==2){
+//			double d1 =  0.015379895031306;
+//    		double d2 = -0.322620578214426;
+//    		double d3 = -0.024707604384971;
+//
+//			q(0) = -1./2. * pow( x(0),2 )
+//				   -d2*2.
+//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
+//			q(1) = -d3*( -8.* x(0) * x(1) );
+//		 }
+//		 else{
+//			q = 0.;
+//		 }
+//	}
+//	else{
+//		q  = 0.;
+//	}
+//}
 
-		 if(sol_opt == 0){
-			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-				    -u_exact(x) + 0.01*exp( -u_exact(x) );
-					-u_exact(x);
-		 }
-		 else if( (sol_opt == 1) || (sol_opt == 2) ){
-			 // r^2/r
-			return -x(0) 
-				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
-//				   +0.5*exp( -u_exact(x) );
-//				   -u_exact(x) + exp( -u_exact(x) );
-				   -u_exact(x);
-//				   +exp( -u_exact(x) );
-		 }
-		 else{
-			return 0;
-		 }
-	}
-	else{
-		return 0;
-	}
-
-}
-
-
-/* exact q = - 1/r grad u */
-void q_exact(const Vector & x,Vector & q){
-	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
-
-		 if(sol_opt == 0){
-			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
-		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
-		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
-		 }
-		 else if(sol_opt ==1){
-			double d1 =  0.075385029660066;
-			double d2 = -0.206294962187880;
-			double d3 = -0.031433707280533;
-
-			q(0) = -1./2. * pow( x(0),2 )
-				   -d2*2.
-				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-			q(1) = -d3*( -8.* x(0) * x(1) );
-		 }
-		 else if(sol_opt ==2){
-			double d1 =  0.015379895031306;
-    		double d2 = -0.322620578214426;
-    		double d3 = -0.024707604384971;
-
-			q(0) = -1./2. * pow( x(0),2 )
-				   -d2*2.
-				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-			q(1) = -d3*( -8.* x(0) * x(1) );
-		 }
-		 else{
-			q = 0.;
-		 }
-	}
-	else{
-		q  = 0.;
-	}
-}
-
-/* r_exact = r */
-double r_exact(const Vector & x){
-	return x(0);
-}
 
 /* vector 0 */
 void zero_fun(const Vector & x, Vector & f){

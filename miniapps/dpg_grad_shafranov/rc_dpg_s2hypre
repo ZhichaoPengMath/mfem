@@ -15,6 +15,21 @@
 #-ksp_gmres_cgs_refinement_type refine_always # help the solver to convrege, but also make it a bit slower
 #<refine_never,refine_ifneeded,refine_always>
 
+# convergent 
+## KSPSetType(pn_ksp,KSPPIPEFGMRES); /* fast */
+## KSPSetType(pn_ksp,KSPDGMRES);
+## KSPSetType(pn_ksp,KSPLGMRES); 
+## KSPSetType(pn_ksp,KSPGMRES);
+## KSPSetType(pn_ksp,KSPPGMRES); /* slow */
+
+# not convergent
+## KSPSetType(pn_ksp,KSPTFQMR);
+## KSPSetType(pn_ksp,KSPTCQMR);
+## KSPSetType(pn_ksp,KSPCGS);
+## KSPSetType(pn_ksp,KSPBCGS);
+## KSPSetType(pn_ksp,KSPCG);
+
+##################################
 #-ksp_rtol 1e-20
 
 -snes_mf_operator
