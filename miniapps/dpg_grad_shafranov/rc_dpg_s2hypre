@@ -17,8 +17,8 @@
 #-snes_rtol 1e-20
 ###################################################
 
-#-ksp_monitor
-#-ksp_view
+-ksp_monitor
+-ksp_view
 
 -ksp_type fgmres
 -ksp_gmres_restart 75 # longer restrat better convergence and slower speed
@@ -45,7 +45,6 @@
 ## KSPSetType(pn_ksp,KSPCG);
 
 ##################################
-#-ksp_rtol 1e-20
 
 -s0_ksp_max_it 10
 #-s0_pc_type gamg

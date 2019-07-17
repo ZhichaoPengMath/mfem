@@ -33,8 +33,11 @@ int sol_opt = 0; /* decide which source term to use */
 double nonlinear_source(double u)
 {
 	if( sol_opt == 0){
-		return u - u*u;
+		return u - u*u -  exp(-u);
 //		return u - 0.01*u*u;
+	}
+	else if (sol_opt == 3){	
+		return -u*u - exp(-u);
 	}
 	else{
 		return u - 0.5*u*u;
@@ -44,7 +47,10 @@ double nonlinear_source(double u)
 double derivative_of_nonlinear_source(double u)
 {
 	if( sol_opt == 0){
-		return 1 - 2.*u;
+		return 1 - 2.*u +  exp(-u);
+	}
+	else if (sol_opt == 3){	
+		return -2*u + exp(-u);
 	}
 	else{
 		return 1. - u;
@@ -85,6 +91,13 @@ double u_exact(const Vector & x){
 				   + d1
 				   + d2 * x(0)*x(0)
 				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
+		}
+		else if(sol_opt == 3){
+			double r0 = -0.5, kr = 1.15*M_PI, kz = 1.15;
+			return 
+//					0.1 *
+					0.5 *
+					sin( kr * (r+r0) ) * cos( kz*z);
 		}
 		else{
 			return 0;
@@ -128,6 +141,14 @@ void q_exact(const Vector & x,Vector & q){
 				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
 			q(1) = -d3*( -8.* x(0) * x(1) );
 		 }
+		 else if(sol_opt == 3){
+			double r0 = -0.5, kr =1.15*M_PI, kz = 1.15;
+			
+			q(0) = - kr/r * cos( kr*(r+r0) ) * cos(kz*z);
+			q(1) =   kz/r * sin( kr*(r+r0) ) * sin(kz*z);
+			q *= 0.5;
+//			q *= 0.1;
+		 }
 		 else{
 			q = 0.;
 		 }
@@ -146,17 +167,31 @@ double linear_source(const Vector & x){
 		 double z(x(1) );
 
 		 if(sol_opt == 0){
-			 return 0.1*(
+			 double u = u_exact(x);
+			 return 0.1*
+				   (
 					 2./r * M_PI*M_PI * sin(M_PI*r) * cos(M_PI*z)
 				    +1./r/r * M_PI * cos(M_PI*r) * cos(M_PI*z)
 					) 
-				    -u_exact(x) + u_exact(x) * u_exact(x)
+				    -u + u * u + exp(-u)
+//				    -u_exact(x) - u_exact(x) * u_exact(x)
+//				    -u_exact(x) + u_exact(x) * u_exact(x)
 					;
 //				    -u_exact(x) + 0.01 * u_exact(x) * u_exact(x); 
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			return -x(0) 
 				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
+		 }
+		 else if( sol_opt == 3){
+			double r0 = -0.5, kr = 1.15*M_PI, kz = 1.15;
+			double u = u_exact(x);
+			return  
+//				  0.1 * 
+				  0.5 * 
+				  kr/r/r * cos( kr*(r+r0) ) * cos(kz * z)
+				  + (kr*kr+kz*kz)/r * u
+				  + u*u + exp(-u);
 		 }
 		 else{
 			return 0;
