@@ -313,11 +313,11 @@ int main(int argc, char *argv[])
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
 
    FunctionCoefficient f_coeff( linear_source );/* coefficients */
-   ParLinearForm * f_div(new ParLinearForm(stest_space) );
-//   f_div->Update(stest_space, F.GetBlock(1) ,0);
-   f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
-//   f_div->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
-   f_div->Assemble();
+   ParLinearForm * linear_source_operator(new ParLinearForm(stest_space) );
+//   linear_source_operator->Update(stest_space, F.GetBlock(1) ,0);
+   linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
+//   linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
+   linear_source_operator->Assemble();
 
 
    // 6. Deal with boundary conditions
@@ -685,7 +685,7 @@ int main(int argc, char *argv[])
 												ess_trace_vdof_list,
 												&b,
 												F,
-												f_div
+												linear_source_operator
 			   );
 
 	// 10. Solve the normal equation system using the PCG iterative solver.
@@ -708,7 +708,7 @@ int main(int argc, char *argv[])
 			if(use_factory){
 				petsc_newton->SetPreconditionerFactory(J_factory);
 			}
-		    petsc_newton->SetRelTol(1e-9);
+		    petsc_newton->SetRelTol(1e-10);
 		   	petsc_newton->SetAbsTol(0.);
 			petsc_newton->SetMaxIter(250000);
 			petsc_newton->SetPrintLevel(1);
@@ -738,7 +738,7 @@ int main(int argc, char *argv[])
 		* AMR (Adaptive Mesh Refinement)
 		* **********************************************/
 	   {
-		  f_div->ParallelAssemble( F_rec.GetBlock(1) );
+		  linear_source_operator->ParallelAssemble( F_rec.GetBlock(1) );
 
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);

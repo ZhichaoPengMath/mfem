@@ -2,8 +2,23 @@
 
 -snes_view
 -snes_monitor
--ksp_monitor
--ksp_view
+-snes_converged_reason
+
+#-snes_linesearch_type bt
+
+-snes_mf_operator
+-snes_type newtontr
+#-snes_type newtonls
+#-snes_type nrichardson
+
+
+#-snes_ksp_ew_conv  # a flag for inexact newton
+
+#-snes_rtol 1e-20
+###################################################
+
+#-ksp_monitor
+#-ksp_view
 
 -ksp_type fgmres
 -ksp_gmres_restart 75 # longer restrat better convergence and slower speed
@@ -32,16 +47,6 @@
 ##################################
 #-ksp_rtol 1e-20
 
--snes_mf_operator
-#-snes_type newtontr
--snes_type newtonls
-#-snes_type nrichardson
-
-
-#-snes_ksp_ew_conv  # a flag for inexact newton
-
-#-snes_rtol 1e-20
-########################
 -s0_ksp_max_it 10
 #-s0_pc_type gamg
 -s0_pc_type hypre # slightly better
@@ -144,7 +149,7 @@
 #-s2_ksp_type preonly
 
 
--s2_ksp_converged_reason
+#-s2_ksp_converged_reason
 #-s2_ksp_view
 #-s2_ksp_monitor
 ########################

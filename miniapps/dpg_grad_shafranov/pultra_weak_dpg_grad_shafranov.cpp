@@ -751,17 +751,21 @@ int main(int argc, char *argv[])
 // The right hand side
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
+		 double r(x(0) );
+		 double z(x(1) );
 
 		 if(sol_opt == 0){
-			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi);
+			 return  -12. *M_PI * cos(4.*M_PI * r) 
+				    +r * 16. *M_PI*M_PI * sin(4.*M_PI * r)
+					+r * 16. *M_PI*M_PI * sin(4.*M_PI * z);
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			 // r^2/r
 			return -x(0);
+		 }
+		 else if( sol_opt == 3){
+			 return  2./r * M_PI*M_PI * sin(M_PI*r) * cos(M_PI*z)
+				    +1./r/r * M_PI * cos(M_PI*r) * cos(M_PI*z);
 		 }
 		 else{
 			return 0;
@@ -776,11 +780,11 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-		double xi(x(0) );
-		double yi(x(1) );
+		double r(x(0) );
+		double z(x(1) );
 
 		if(sol_opt == 0){
-			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+			return r * r * (sin(4*M_PI*r) + sin(4*M_PI*z) + z );
 		}
 		else if(sol_opt == 1){
 			double d1 =  0.075385029660066;
@@ -802,6 +806,9 @@ double u_exact(const Vector & x){
 				   + d2 * x(0)*x(0)
 				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
 		}
+		else if(sol_opt == 3){
+			return  sin(M_PI*r) * cos(M_PI*z);
+		}
 		else{
 			return 0;
 		}	
@@ -815,13 +822,13 @@ double u_exact(const Vector & x){
 /* exact q = - 1/r grad u */
 void q_exact(const Vector & x,Vector & q){
 	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
+		 double r(x(0) );
+		 double z(x(1) );
 
 		 if(sol_opt == 0){
-			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
-		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
-		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
+			q(0) =-2 * (sin(4.*M_PI*r) + sin(4.*M_PI*z) + z)
+		 	      -r* (4.*M_PI * cos(4.*M_PI*r) );
+		 	q(1) =-r* (4.*M_PI * cos(4.*M_PI*z) + 1 );
 		 }
 		 else if(sol_opt ==1){
 			double d1 =  0.075385029660066;
@@ -842,6 +849,10 @@ void q_exact(const Vector & x,Vector & q){
 				   -d2*2.
 				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
 			q(1) = -d3*( -8.* x(0) * x(1) );
+		 }
+		 else if(sol_opt == 3){
+			 q(0) = -M_PI/r * cos(M_PI*r) * cos(M_PI*z);
+			 q(1) =  M_PI/r * sin(M_PI*r) * sin(M_PI*z);
 		 }
 		 else{
 			q = 0.;

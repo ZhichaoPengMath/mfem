@@ -32,12 +32,23 @@ int sol_opt = 0; /* decide which source term to use */
  * ***********************************/
 double nonlinear_source(double u)
 {
-	return u - 0.5*u*u;
+	if( sol_opt == 0){
+		return u - u*u;
+//		return u - 0.01*u*u;
+	}
+	else{
+		return u - 0.5*u*u;
+	}
 }
 
 double derivative_of_nonlinear_source(double u)
 {
-	return 1. - u;
+	if( sol_opt == 0){
+		return 1 - 2.*u;
+	}
+	else{
+		return 1. - u;
+	}
 }
 
 
@@ -49,11 +60,11 @@ double derivative_of_nonlinear_source(double u)
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-		double xi(x(0) );
-		double yi(x(1) );
+		double r(x(0) );
+		double z(x(1) );
 
 		if(sol_opt == 0){
-			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
+			return  0.1*sin(M_PI*r) * cos(M_PI*z);
 		}
 		else if(sol_opt == 1){
 			double d1 =  0.075385029660066;
@@ -88,13 +99,14 @@ double u_exact(const Vector & x){
 /* exact q = - 1/r grad u */
 void q_exact(const Vector & x,Vector & q){
 	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
+		 double r(x(0) );
+		 double z(x(1) );
 
 		 if(sol_opt == 0){
-			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
-		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
-		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
+			 q(0) = -M_PI/r * cos(M_PI*r) * cos(M_PI*z);
+			 q(1) =  M_PI/r * sin(M_PI*r) * sin(M_PI*z);
+			 q *= 0.1;
+			 
 		 }
 		 else if(sol_opt ==1){
 			double d1 =  0.075385029660066;
@@ -130,14 +142,17 @@ void q_exact(const Vector & x,Vector & q){
  * ******************************/
 double linear_source(const Vector & x){
 	if(x.Size() == 2){
-		 double xi(x(0) );
-		 double yi(x(1) );
+		 double r(x(0) );
+		 double z(x(1) );
 
 		 if(sol_opt == 0){
-			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-				    -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
+			 return 0.1*(
+					 2./r * M_PI*M_PI * sin(M_PI*r) * cos(M_PI*z)
+				    +1./r/r * M_PI * cos(M_PI*r) * cos(M_PI*z)
+					) 
+				    -u_exact(x) + u_exact(x) * u_exact(x)
+					;
+//				    -u_exact(x) + 0.01 * u_exact(x) * u_exact(x); 
 		 }
 		 else if( (sol_opt == 1) || (sol_opt == 2) ){
 			return -x(0) 
