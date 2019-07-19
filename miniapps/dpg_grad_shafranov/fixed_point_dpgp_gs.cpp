@@ -763,17 +763,17 @@ int main(int argc, char *argv[])
 	      BlockVector LSres( offsets_test ), tmp( offsets_test );
 	      B.Mult(x, LSres);
 
-		  /* Bx - constant part */
+		  /* Bx - linear source */
 	      LSres -= F_rec;
 
-		  /* Bx - nonlinear part */
+		  /* Bx - nonlinear source */
 		  F_rec = 0.;
 		  Vector F1(F_rec.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
 		  ParGridFunction u0_now;
 		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     	  u0_now.MakeTRef(u0_space, u0_vec, 0);
 		  u0_now.SetFromTrueVector();
-    	  RHSCoefficient fu_coefficient( &u0_now );
+    	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
 
 		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
 		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
