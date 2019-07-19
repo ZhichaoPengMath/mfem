@@ -24,7 +24,8 @@ MFEM_LIB_FILE = mfem_is_not_built
 SEQ_MINIAPPS =
 PAR_MINIAPPS = ex1p_grad_shafranov pultra_weak_dpg_grad_shafranov pultra_weak_dpg_grad_shafranov_refine_study\
 			   dpgp_gs ultra_weak_dpgp dpgp_gs_newton\
-			   nonlinear_dpgp_gs test_nonlinear_dpgp_gs
+			   nonlinear_dpgp_gs test_nonlinear_dpgp_gs\
+			   fixed_point_dpgp_gs
 ifeq ($(MFEM_USE_MPI),NO)
    MINIAPPS = $(SEQ_MINIAPPS)
 else
