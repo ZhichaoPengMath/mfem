@@ -25,7 +25,7 @@
 using namespace std;
 using namespace mfem;
 
-double petsc_linear_solver_rel_tol = 1e-9;
+double petsc_linear_solver_rel_tol = 1e-16;
 
 /**********************************************************/
 class FixedPointReducedSystemOperator : public Operator
@@ -83,8 +83,8 @@ private:
 	Vector &F;
 //	Operator * A;
 
-	GMRESSolver * solver;
-//	PetscLinearSolver * solver;
+//	FGMRESSolver * solver;
+	PetscLinearSolver * solver;
 
 	BlockDiagonalPreconditioner * P;
 
@@ -92,6 +92,7 @@ private:
 	HypreBoomerAMG * prec0;
 	HypreBoomerAMG * prec1;
 	Solver * prec2;
+//	PetscLinearSolver * prec3;
 	HypreBoomerAMG * prec3;
 
 	/* operator calculate J^T G^-1 Bx */
@@ -248,9 +249,19 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 
 	prec2 = new HypreAMS( *matVhat, qhat_space );
 	
-//	prec3 = new HypreSmoother(*matShat);
 	prec3 = new HypreBoomerAMG( *matShat );
 	prec3->SetPrintLevel(0);
+
+//	prec3 = new PetscLinearSolver( *matShat );
+//	prec3->SetRelTol(petsc_linear_solver_rel_tol);
+//	prec3->SetMaxIter(20);
+//
+//	KSP ksp_prec3(*prec3);
+//	KSPSetType(ksp_prec3,KSPCG);
+//	PC  pc_prec3;
+//	KSPGetPC(ksp_prec3,&pc_prec3);
+//	PCSetType(pc_prec3,PCHYPRE);
+//	prec3->SetPrintLevel(1);
 
 
 
@@ -260,10 +271,10 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	prec->SetDiagonalBlock(3,prec3);
 
 	/* initialize linear solver */
-	solver = new GMRESSolver(MPI_COMM_WORLD);
-//	solver = new PetscLinearSolver(MPI_COMM_WORLD);
+//	solver = new FGMRESSolver(MPI_COMM_WORLD);
+	solver = new PetscLinearSolver(MPI_COMM_WORLD);
 	solver->SetRelTol(petsc_linear_solver_rel_tol);
-	solver->SetMaxIter(500);
+	solver->SetMaxIter(2500);
 //	solver->SetPreconditioner(*P);
 	solver->SetPreconditioner(*prec);
 }

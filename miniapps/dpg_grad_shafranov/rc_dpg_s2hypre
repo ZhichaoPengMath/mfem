@@ -19,7 +19,7 @@
 
 
 
-
+-snes_ngs_rtol 1e-12
 #-snes_stol 0. # tolerance: two successive steps
 #-snes_trtol 0. # tolerence: delta for the trust region method
 

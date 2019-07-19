@@ -37,7 +37,6 @@ double nonlinear_source(double u, const Vector &x)
 	}
 	else if (sol_opt == 3){	
 		double kr = 1.15*M_PI, kz = 1.15;
-//		return  -u*u - exp(-u);
 		return (kr*kr+kz*kz)/x(0)*u -u*u - exp(-u);
 	}
 	else{
@@ -53,7 +52,6 @@ double derivative_of_nonlinear_source(double u,const Vector &x)
 	}
 	else if (sol_opt == 3){	
 		double kr = 1.15*M_PI, kz = 1.15;
-//		return  -2*u + exp(-u);
 		return (kr*kr+kz*kz)/x(0) -2*u + exp(-u);
 	}
 	else{
@@ -176,8 +174,6 @@ void q_exact(const Vector & x,Vector & q){
 			
 			q(0) = - kr/r * cos( kr*(r+r0) ) * cos(kz*z);
 			q(1) =   kz/r * sin( kr*(r+r0) ) * sin(kz*z);
-//			q *= 0.5;
-//			q *= 0.1;
 		 }
 		 else{
 			q = 0.;
@@ -217,10 +213,7 @@ double linear_source(const Vector & x){
 			double r0 = -0.5, kr = 1.15*M_PI, kz = 1.15;
 			double u = u_exact(x);
 			return  
-//				  0.1 * 
-//				  0.5 * 
 				  kr/r/r * cos( kr*(r+r0) ) * cos(kz * z)
-//				  + (kr*kr+kz*kz)/r * u
 				  + u*u + exp(-u);
 		 }
 		 else{

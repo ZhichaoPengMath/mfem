@@ -126,6 +126,9 @@ int main(int argc, char *argv[])
    else if(sol_opt == 2){
 		mesh_file = "../../data/cerfon_nstx_quad.mesh";
    }
+   else if(sol_opt == 3){
+		mesh_file = "../../data/ITER_double_null.mesh";
+   }
    else{
 		mesh_file = "../../data/inline-quad-pzc2.mesh";
    }
