@@ -13,7 +13,7 @@ namespace mfem
 	{
 		private:
 			GridFunction *u;
-			double (*Function)(double x); 
+			double (*Function)(double uu); 
 		public:
 			FUCoefficient(GridFunction *_u, double (*_F)(double x) ): u(_u), Function(_F){};
 
@@ -32,6 +32,36 @@ namespace mfem
 		double uip = u->GetValue(T.ElementNo,ip);
 
 		return (*Function)(uip);
+
+	}
+	/* **************************
+	 * Coefficient for F(u),
+	 * where F(u,x) is a scalar and 
+	 * u is a scalar grid function
+	 * **************************/
+	class FUXCoefficient : public Coefficient
+	{
+		private:
+			GridFunction *u;
+			double (*Function)(double uu, const Vector & xx); 
+		public:
+			FUXCoefficient(GridFunction *_u, double (*_F)(double uu, const Vector & xx) ): u(_u), Function(_F){};
+
+			double Eval(ElementTransformation &T, const IntegrationPoint &ip);
+	};
+	double FUXCoefficient::Eval(ElementTransformation &T, const IntegrationPoint &ip)
+	{
+		/* coordinate */
+		double x[3];
+		Vector transip(x,3);
+		T.Transform(ip, transip);
+
+		double xi = transip(0);
+		double yi = transip(1);
+
+		double uip = u->GetValue(T.ElementNo,ip);
+
+		return (*Function)(uip,transip);
 
 	}
 /************************************************************/

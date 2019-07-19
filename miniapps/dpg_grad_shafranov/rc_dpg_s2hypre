@@ -4,12 +4,24 @@
 -snes_monitor
 -snes_converged_reason
 
+
+
 #-snes_linesearch_type bt
 
 -snes_mf_operator
--snes_type newtontr
+-snes_type newtontr # seems to be better
 #-snes_type newtonls
-#-snes_type nrichardson
+
+#-snes_tr_delta0 0.1
+#-snes_tr_delta1 0.6
+#-snes_tr_delta2 0.1
+#-snes_tr_delta3 0.1
+
+
+
+
+#-snes_stol 0. # tolerance: two successive steps
+#-snes_trtol 0. # tolerence: delta for the trust region method
 
 
 #-snes_ksp_ew_conv  # a flag for inexact newton
@@ -18,9 +30,11 @@
 ###################################################
 
 -ksp_monitor
--ksp_view
+#-ksp_view
+#-ksp_rtol 1e-3
 
 -ksp_type fgmres
+#-ksp_gmres_restart 100 # longer restrat better convergence and slower speed
 -ksp_gmres_restart 75 # longer restrat better convergence and slower speed
 #-ksp_gmres_restart 50
 #-ksp_gmres_restart 30
@@ -91,7 +105,7 @@
 -s2_ksp_rtol 1e-3
 #-s2_ksp_atol 1e-6
 
-#-s2_ksp_max_it 15
+#-s2_ksp_max_it 150
 
 
 #-s2_pc_type sor # perform better for sol_opt 0

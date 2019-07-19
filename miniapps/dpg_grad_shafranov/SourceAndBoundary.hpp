@@ -30,11 +30,41 @@ int sol_opt = 0; /* decide which source term to use */
  * derivative_of_nonlinear_source gives its derivative corresponding
  * to u
  * ***********************************/
+double nonlinear_source(double u, const Vector &x)
+{
+	if( sol_opt == 0){
+		return u - u*u -  exp(-u);
+	}
+	else if (sol_opt == 3){	
+		double kr = 1.15*M_PI, kz = 1.15;
+//		return  -u*u - exp(-u);
+		return (kr*kr+kz*kz)/x(0)*u -u*u - exp(-u);
+	}
+	else{
+		return u - 0.5*u*u;
+	}
+}
+
+
+double derivative_of_nonlinear_source(double u,const Vector &x)
+{
+	if( sol_opt == 0){
+		return 1 - 2.*u +  exp(-u);
+	}
+	else if (sol_opt == 3){	
+		double kr = 1.15*M_PI, kz = 1.15;
+//		return  -2*u + exp(-u);
+		return (kr*kr+kz*kz)/x(0) -2*u + exp(-u);
+	}
+	else{
+		return 1. - u;
+	}
+}
+/****************************************************/
 double nonlinear_source(double u)
 {
 	if( sol_opt == 0){
 		return u - u*u -  exp(-u);
-//		return u - 0.01*u*u;
 	}
 	else if (sol_opt == 3){	
 		return -u*u - exp(-u);
@@ -43,6 +73,7 @@ double nonlinear_source(double u)
 		return u - 0.5*u*u;
 	}
 }
+
 
 double derivative_of_nonlinear_source(double u)
 {
@@ -56,7 +87,6 @@ double derivative_of_nonlinear_source(double u)
 		return 1. - u;
 	}
 }
-
 
 /************************************************
  * exact solution/boundary condition u_exact, 
@@ -96,7 +126,7 @@ double u_exact(const Vector & x){
 			double r0 = -0.5, kr = 1.15*M_PI, kz = 1.15;
 			return 
 //					0.1 *
-					0.5 *
+//					0.5 *
 					sin( kr * (r+r0) ) * cos( kz*z);
 		}
 		else{
@@ -146,7 +176,7 @@ void q_exact(const Vector & x,Vector & q){
 			
 			q(0) = - kr/r * cos( kr*(r+r0) ) * cos(kz*z);
 			q(1) =   kz/r * sin( kr*(r+r0) ) * sin(kz*z);
-			q *= 0.5;
+//			q *= 0.5;
 //			q *= 0.1;
 		 }
 		 else{
@@ -188,9 +218,9 @@ double linear_source(const Vector & x){
 			double u = u_exact(x);
 			return  
 //				  0.1 * 
-				  0.5 * 
+//				  0.5 * 
 				  kr/r/r * cos( kr*(r+r0) ) * cos(kz * z)
-				  + (kr*kr+kz*kz)/r * u
+//				  + (kr*kr+kz*kz)/r * u
 				  + u*u + exp(-u);
 		 }
 		 else{

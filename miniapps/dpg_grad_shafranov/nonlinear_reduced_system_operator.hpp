@@ -231,7 +231,8 @@ void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
     u0_now.MakeTRef(u0_space,u0_vec , 0);
 	u0_now.SetFromTrueVector();
 //    DFDUCoefficient dfu_coefficient( &u0_now );
-    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
+    FUXCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
+//    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
 
 	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
 	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
@@ -279,7 +280,8 @@ void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
     u0_now.MakeTRef(u0_space, u0_vec, 0);
 	u0_now.SetFromTrueVector();
 //    RHSCoefficient fu_coefficient( &u0_now );
-    FUCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+    FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+//    FUCoefficient fu_coefficient( &u0_now, &nonlinear_source );
 
 	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
 	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );

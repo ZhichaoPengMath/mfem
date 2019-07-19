@@ -303,12 +303,27 @@ int main(int argc, char *argv[])
 
 
    ParGridFunction u0(u0_space);
+//   u0.MakeTRef(u0_space, x.GetBlock(u0_var), 0); /* Question should I use TRef or Ref here ? */
+//   u0.ProjectCoefficient(u_coeff);
+//
+//   x.GetBlock(u0_var) = u0;
+//   Vector diff(u0.Size() );
+//   subtract(u0, x.GetBlock(u0_var), diff);
+//   cout<<diff.Norml2()<<endl;
+
 
    ParGridFunction q0(q0_space);
+//   q0.MakeTRef(q0_space, x.GetBlock(q0_var), 0); /* Question should I use TRef or Ref here ? */
+//   q0.ProjectCoefficient(q_coeff);
+//   x.GetBlock(q0_var) = q0;
 
    ParGridFunction uhat;
    uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0); /* Question should I use TRef or Ref here ? */
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
+
+//   for(int i = 0;i<uhat.Size();i++){
+//		cout<<i<<": "<<uhat(i)<<endl;
+//   }
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
 
@@ -725,6 +740,7 @@ int main(int argc, char *argv[])
 			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
 			Vector bb;
 		    petsc_newton->Mult(bb,x);
+
 
 	   }
 	   timer.Stop();
