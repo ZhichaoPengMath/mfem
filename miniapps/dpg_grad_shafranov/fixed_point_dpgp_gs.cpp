@@ -633,53 +633,52 @@ int main(int argc, char *argv[])
 	   if(prec_amg != 1){
 			Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
 	   }
-	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
-   	   Operator *Vhatinv=NULL;// *Shatinv=NULL;
-//   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
-	   HypreBoomerAMG *Shatinv = NULL;
+//	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
+//   	   Operator *Vhatinv=NULL;// *Shatinv=NULL;
+////   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
+//	   HypreBoomerAMG *Shatinv = NULL;
 	   
-	   V0inv = new HypreBoomerAMG( *matV0 );
-	   V0inv->SetPrintLevel(0);
-	   S0inv = new HypreBoomerAMG( *AmatS0 );
-	   S0inv->SetPrintLevel(0);
-	   if(vhat_amg){
-			Vhatinv = new HypreBoomerAMG( *Vhat );
+//	   V0inv = new HypreBoomerAMG( *matV0 );
+//	   V0inv->SetPrintLevel(0);
+//	   S0inv = new HypreBoomerAMG( *AmatS0 );
+//	   S0inv->SetPrintLevel(0);
+//	   if(vhat_amg){
+//			Vhatinv = new HypreBoomerAMG( *Vhat );
 //			Vhatinv = new HypreSmoother(*Vhat);
-	   }
-	   else{
-	      if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
-   	      else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
-	   }
+//	   }
+//	   else{
+//	      if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
+//   	      else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
+//	   }
 	   
-	   double prec_rtol = 1e-3;
-	   int prec_maxit = 200;
-	   BlockDiagonalPreconditioner P(offsets);
-	   P.SetDiagonalBlock(0, V0inv);
-	   P.SetDiagonalBlock(1, S0inv);
-	   P.SetDiagonalBlock(2, Vhatinv);
-
-	   HyprePCG *Shatinv2=NULL;
-	   if (prec_amg == 1)
-	   {
-	   	  Shatinv = new HypreBoomerAMG( *Shat );
-		  Shatinv->SetPrintLevel(0);
-	      P.SetDiagonalBlock(3, Shatinv);
-	   }
-	   else
-	   {
-		  if(user_pcg_prec_rtol>0){
-	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
-	   	  }
-	   	  if(user_pcg_prec_maxit>0){
-	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
-	   	  }
-		  Shatinv2 = new HyprePCG( *Shat2 );
-	      Shatinv2->SetPrintLevel(0);
-	      Shatinv2->SetTol(prec_rtol);
-	      Shatinv2->SetMaxIter(prec_maxit);
-	      P.SetDiagonalBlock(3, Shatinv2);
-	   }
-
+//	   double prec_rtol = 1e-3;
+//	   int prec_maxit = 200;
+//	   BlockDiagonalPreconditioner P(offsets);
+//	   P.SetDiagonalBlock(0, V0inv);
+//	   P.SetDiagonalBlock(1, S0inv);
+//	   P.SetDiagonalBlock(2, Vhatinv);
+//
+//	   HyprePCG *Shatinv2=NULL;
+//	   if (prec_amg == 1)
+//	   {
+//	   	  Shatinv = new HypreBoomerAMG( *Shat );
+//		  Shatinv->SetPrintLevel(0);
+//	      P.SetDiagonalBlock(3, Shatinv);
+//	   }
+//	   else
+//	   {
+//		  if(user_pcg_prec_rtol>0){
+//	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
+//	   	  }
+//	   	  if(user_pcg_prec_maxit>0){
+//	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
+//	   	  }
+//		  Shatinv2 = new HyprePCG( *Shat2 );
+//	      Shatinv2->SetPrintLevel(0);
+//	      Shatinv2->SetTol(prec_rtol);
+//	      Shatinv2->SetMaxIter(prec_maxit);
+//	      P.SetDiagonalBlock(3, Shatinv2);
+//	   }
 	
 	   /*******************************************************************************
 		* 9b pass all the pointer to the infomration interfce,
@@ -694,9 +693,6 @@ int main(int argc, char *argv[])
 												matB_q_jump, matVinv, matSinv,
 												matV0, AmatS0, Vhat, Shat, 
 												offsets, offsets_test,
-												A,
-												matAL01,
-												matAL11,
 												&B,
 												&Jac,
 												&InverseGram,
@@ -719,14 +715,8 @@ int main(int argc, char *argv[])
 		   }
 	   }
 	   else{
-		    PetscPreconditionerFactory *J_factory=NULL;
-			J_factory = new PreconditionerFactory(*reduced_system_operator, "JFNK preconditioner");
-
 		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
 		    petsc_newton->SetOperator( *reduced_system_operator );
-			if(use_factory){
-				petsc_newton->SetPreconditionerFactory(J_factory);
-			}
 		    petsc_newton->SetRelTol(1e-10);
 		   	petsc_newton->SetAbsTol(0.);
 			petsc_newton->SetMaxIter(250000);
@@ -903,11 +893,11 @@ int main(int argc, char *argv[])
    delete Shat2;
    delete Shat;
 //   /* preconditionner */
-   delete V0inv;
-   delete S0inv;
-   delete Vhatinv;
-   delete Shatinv;
-   delete Shatinv2;
+//   delete V0inv;
+//   delete S0inv;
+//   delete Vhatinv;
+//   delete Shatinv;
+//   delete Shatinv2;
    /* finite element collection */
    delete u0_fec;
    delete q0_fec;
