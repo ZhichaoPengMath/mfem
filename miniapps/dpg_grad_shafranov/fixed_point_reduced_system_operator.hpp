@@ -86,7 +86,7 @@ private:
 //	FGMRESSolver * solver;
 	PetscLinearSolver * solver;
 
-	BlockDiagonalPreconditioner * P;
+//	BlockDiagonalPreconditioner * P;
 
 	BlockDiagonalPreconditioner * prec;
 	HypreBoomerAMG * prec0;
@@ -168,7 +168,7 @@ public:
 			const Array<int> &_ess_trace_vdof_list,
 			Vector *_b,
 			Vector &_F,
-		    BlockDiagonalPreconditioner * _P,
+//		    BlockDiagonalPreconditioner * _P,
 			ParLinearForm * _linear_source_operator
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
@@ -207,7 +207,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	const Array<int> &_ess_trace_vdof_list,
 	Vector *_b,
 	Vector &_F,
-	BlockDiagonalPreconditioner * _P,
+//	BlockDiagonalPreconditioner * _P,
 	ParLinearForm * _linear_source_operator
 	):
 	Operator( _A->Width(), _A->Height() ), /* size of operator, important !!! */
@@ -234,8 +234,8 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	NDfDu(NULL),
 	use_petsc(_use_petsc),
     fu(offsets_test[2] - offsets_test[1] ),
-	JTGinvB(NULL),
-	P(_P)
+//	P(_P),
+	JTGinvB(NULL)
 {
 
 	/* initialize preconditioner */

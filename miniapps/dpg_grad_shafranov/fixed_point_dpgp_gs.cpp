@@ -703,7 +703,7 @@ int main(int argc, char *argv[])
 												ess_trace_vdof_list,
 												&b,
 												F,
-												&P,
+//												&P,
 												linear_source_operator
 			   );
 

@@ -5,22 +5,21 @@
 -snes_converged_reason
 
 
-
+##########################
 #-snes_type nrichardson
 #-snes_linesearch_type l2
+#-snes_linesearch_type basic # more iteration, but time comparable with l2
 
--snes_type anderson
+#-snes_linesearch_type cp # not good
+#-snes_linesearch_type bt # not working
+#-snes_linesearch_type nleqerr # not working
+##########################
 
+-snes_type anderson # faster
 
-#-snes_mf_operator
-#-snes_type newtontr # seems to be better
-#-snes_type newtonls
-
-#-snes_tr_delta0 0.1
-#-snes_tr_delta1 0.6
-#-snes_tr_delta2 0.1
-#-snes_tr_delta3 0.1
-
+#-snes_anderson_monitor
+#-snes_anderson_m 3
+#-snes_anderson_restart_it 3
 
 
 
@@ -37,8 +36,8 @@
 ###################################################
 ###################################################
 
--ksp_monitor
--ksp_view
+#-ksp_monitor
+#-ksp_view
 -ksp_converged_reason
 #-ksp_rtol 1e-3
 
