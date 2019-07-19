@@ -25,9 +25,10 @@
 using namespace std;
 using namespace mfem;
 
+double petsc_linear_solver_rel_tol = 1e-9;
 
 /**********************************************************/
-class ReducedSystemOperator : public Operator
+class FixedPointReducedSystemOperator : public Operator
 { 
 private:
 	bool * use_petsc;
@@ -82,6 +83,19 @@ private:
 	Vector &F;
 //	Operator * A;
 
+	GMRESSolver * solver;
+//	PetscLinearSolver * solver;
+
+	BlockDiagonalPreconditioner * P;
+
+	BlockDiagonalPreconditioner * prec;
+	HypreBoomerAMG * prec0;
+	HypreBoomerAMG * prec1;
+	Solver * prec2;
+	HypreBoomerAMG * prec3;
+
+	/* operator calculate J^T G^-1 Bx */
+	mutable Operator * JTGinvB;
 	mutable HypreParMatrix * NDfDu;
 	mutable BlockOperator * Jac;
 	/**********************************
@@ -132,7 +146,7 @@ private:
     mutable Vector fu;	
 
 public:
-	ReducedSystemOperator(
+	FixedPointReducedSystemOperator(
 			bool * _use_petsc,
 			ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 			ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
@@ -153,6 +167,7 @@ public:
 			const Array<int> &_ess_trace_vdof_list,
 			Vector *_b,
 			Vector &_F,
+		    BlockDiagonalPreconditioner * _P,
 			ParLinearForm * _linear_source_operator
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
@@ -166,14 +181,14 @@ public:
 
 	virtual Operator &GetGradient(const Vector &x) const;
 
-	virtual ~ReducedSystemOperator();
+	virtual ~FixedPointReducedSystemOperator();
 
 };
 
 /******************************************************
  *  Pass the pointers, initialization
  *******************************************************/
-ReducedSystemOperator::ReducedSystemOperator(
+FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	bool * _use_petsc,
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
@@ -191,6 +206,7 @@ ReducedSystemOperator::ReducedSystemOperator(
 	const Array<int> &_ess_trace_vdof_list,
 	Vector *_b,
 	Vector &_F,
+	BlockDiagonalPreconditioner * _P,
 	ParLinearForm * _linear_source_operator
 	):
 	Operator( _A->Width(), _A->Height() ), /* size of operator, important !!! */
@@ -216,11 +232,45 @@ ReducedSystemOperator::ReducedSystemOperator(
 	Jacobian(NULL),
 	NDfDu(NULL),
 	use_petsc(_use_petsc),
-    fu(offsets_test[2] - offsets_test[1] ){}
+    fu(offsets_test[2] - offsets_test[1] ),
+	JTGinvB(NULL),
+	P(_P)
+{
+
+	/* initialize preconditioner */
+    prec = new BlockDiagonalPreconditioner(offsets);
+
+	prec0 = new HypreBoomerAMG( *matV0 );
+	prec0->SetPrintLevel(0);
+
+    prec1 = new HypreBoomerAMG( *matS0 );	
+	prec1->SetPrintLevel(0);
+
+	prec2 = new HypreAMS( *matVhat, qhat_space );
+	
+//	prec3 = new HypreSmoother(*matShat);
+	prec3 = new HypreBoomerAMG( *matShat );
+	prec3->SetPrintLevel(0);
+
+
+
+	prec->SetDiagonalBlock(0,prec0);
+	prec->SetDiagonalBlock(1,prec1);
+	prec->SetDiagonalBlock(2,prec2);
+	prec->SetDiagonalBlock(3,prec3);
+
+	/* initialize linear solver */
+	solver = new GMRESSolver(MPI_COMM_WORLD);
+//	solver = new PetscLinearSolver(MPI_COMM_WORLD);
+	solver->SetRelTol(petsc_linear_solver_rel_tol);
+	solver->SetMaxIter(500);
+//	solver->SetPreconditioner(*P);
+	solver->SetPreconditioner(*prec);
+}
 /******************************************************
  *  Update NDfDu = DF(u)/Du
  *******************************************************/
-void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
+void FixedPointReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 {
 	/* calculate df(u)/du  */
 	delete NDfDu;
@@ -246,7 +296,7 @@ void ReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 /******************************************************
  *  Update Jac = B - Df/dx
  *******************************************************/
-void ReducedSystemOperator::UpdateJac(const Vector &x) const
+void FixedPointReducedSystemOperator::UpdateJac(const Vector &x) const
 {
 	/* calculate df(u)/du  */
 //	UpdateNDFDU(x);
@@ -254,61 +304,109 @@ void ReducedSystemOperator::UpdateJac(const Vector &x) const
 	Jac->SetBlock(1,1,NDfDu );
 	
 }
-
-
 /******************************************************
  *  Try to solve F(x) = 0
  *  Mult gives us y = F(x)
  *******************************************************/
-void ReducedSystemOperator::Mult(const Vector &x, Vector &y) const
+void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
 	/* update the Df/Du */
 	UpdateNDFDU(x);
 	/* update the Jacobian */
 	UpdateJac(x);
 
-//	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*Jac);
-	RAPOperator *oper = new RAPOperator(*Jac,*Ginv,*B);
-	oper->Mult(x,y);
+	/* set linear solver to approximate (J^TG^-1B)^-1 */
+	JTGinvB = new RAPOperator(*Jac,*Ginv,*B);
+	solver->SetOperator(*JTGinvB);
 
-	/* update -(f(u),v) part */
+	/****************************************************************************/
+	/* calculate the right hand side J^T G^-1 F(x) */
+	/* nonlinear source */
     Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
 	F1 = 0.;
     ParGridFunction u0_now;
 	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
     u0_now.MakeTRef(u0_space, u0_vec, 0);
 	u0_now.SetFromTrueVector();
-//    RHSCoefficient fu_coefficient( &u0_now );
     FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
-//    FUCoefficient fu_coefficient( &u0_now, &nonlinear_source );
 
+	/* linear source */
 	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
 	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
 	fu_mass->Assemble();
 
 	fu_mass->ParallelAssemble(F1); delete fu_mass;
 
-	/* update linear source part */
-//	if(*use_petsc){
-		Vector F2( F1.Size() );
-    	linear_source_operator->ParallelAssemble( F2 );
+	Vector F2( F1.Size() );
+    linear_source_operator->ParallelAssemble( F2 );
 
-		F1 += F2;
-//	}
+	F1 += F2;
 
+	/* J^T G^-1 (linear source + nonlinear source) */
     BlockVector rhs(offsets); 
     rhs=0.;
 
     BlockVector IGF(offsets_test);
     Ginv->Mult(F,IGF);
     Jac->MultTranspose(IGF,rhs);
-   
-	y-=rhs;
 
-	delete oper;
+	rhs *= -1.;
+	/****************************************************************************/
+	solver->Mult(rhs,y); /* calculate  -(J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
+	y += x;			/* y = x - (J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
+
+	delete JTGinvB;
 }
 
-Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
+
+/******************************************************
+ *  Try to solve F(x) = 0
+ *  Mult gives us y = F(x)
+ *******************************************************/
+//void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
+//{
+//	/* update the Df/Du */
+//	UpdateNDFDU(x);
+//	/* update the Jacobian */
+//	UpdateJac(x);
+//
+//	JTGinvB = new RAPOperator(*Jac,*Ginv,*B);
+//	JTGinvB->Mult(x,y);
+//
+//	/* update -(f(u),v) part */
+//    Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+//	F1 = 0.;
+//    ParGridFunction u0_now;
+//	Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+//    u0_now.MakeTRef(u0_space, u0_vec, 0);
+//	u0_now.SetFromTrueVector();
+//    FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+//
+//	ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+//	fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+//	fu_mass->Assemble();
+//
+//	fu_mass->ParallelAssemble(F1); delete fu_mass;
+//
+//	Vector F2( F1.Size() );
+//    linear_source_operator->ParallelAssemble( F2 );
+//
+//	F1 += F2;
+//
+//    BlockVector rhs(offsets); 
+//    rhs=0.;
+//
+//    BlockVector IGF(offsets_test);
+//    Ginv->Mult(F,IGF);
+//    Jac->MultTranspose(IGF,rhs);
+//   
+//	y-=rhs;
+//
+//	delete JTGinvB;
+//}
+/*************************************************************************************/
+
+Operator &FixedPointReducedSystemOperator::GetGradient(const Vector &x) const
 {
 	/* update the -Df/Du */
 	UpdateNDFDU(x);
@@ -337,7 +435,9 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &x) const
 	return * A;
 }
 
-ReducedSystemOperator::~ReducedSystemOperator(){
+FixedPointReducedSystemOperator::~FixedPointReducedSystemOperator(){
+	delete solver;
+	delete prec;
 	delete Jacobian;
 }
 
@@ -456,10 +556,10 @@ MyBlockSolver::~MyBlockSolver()
 class PreconditionerFactory : public PetscPreconditionerFactory
 {
 private:
-   const ReducedSystemOperator& op;
+   const FixedPointReducedSystemOperator& op;
 
 public:
-   PreconditionerFactory(const ReducedSystemOperator& op_,
+   PreconditionerFactory(const FixedPointReducedSystemOperator& op_,
                          const string& name_): PetscPreconditionerFactory(name_), op(op_) {};
    virtual mfem::Solver* NewPreconditioner(const mfem::OperatorHandle &oh)
    { return new MyBlockSolver(oh);}

@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
    // 1b. We initialize PETSc
    if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
 
-   if (use_petsc) { amg_perturbation = 0.; }
+   if (use_petsc) { amg_perturbation = 1e-3; }
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -680,10 +680,10 @@ int main(int argc, char *argv[])
 	
 	   /*******************************************************************************
 		* 9b pass all the pointer to the infomration interfce,
-		* everything is passed to PETSC by ReducedSystemOperator,
-		* Jac and A is updated throught the ReducedSystemOperator
+		* everything is passed to PETSC by FixedPointReducedSystemOperator,
+		* Jac and A is updated throught the FixedPointReducedSystemOperator
 		* ******************************************************************************/
-	   ReducedSystemOperator * reduced_system_operator = new ReducedSystemOperator(
+	   FixedPointReducedSystemOperator * reduced_system_operator = new FixedPointReducedSystemOperator(
 												&use_petsc,
 												u0_space, q0_space, uhat_space, qhat_space,
 												vtest_space, stest_space,
@@ -700,6 +700,7 @@ int main(int argc, char *argv[])
 												ess_trace_vdof_list,
 												&b,
 												F,
+												&P,
 												linear_source_operator
 			   );
 

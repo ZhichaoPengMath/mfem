@@ -1,0 +1,64 @@
+# matrix-free Jacobian action, preconditioner constructed using PetscPreconditionerFactory
+
+-snes_view
+-snes_monitor
+-snes_converged_reason
+
+
+
+#-snes_type nrichardson
+#-snes_linesearch_type l2
+
+-snes_type anderson
+
+
+#-snes_mf_operator
+#-snes_type newtontr # seems to be better
+#-snes_type newtonls
+
+#-snes_tr_delta0 0.1
+#-snes_tr_delta1 0.6
+#-snes_tr_delta2 0.1
+#-snes_tr_delta3 0.1
+
+
+
+
+#-snes_stol 0. # tolerance: two successive steps
+#-snes_trtol 0. # tolerence: delta for the trust region method
+
+
+#-snes_ksp_ew_conv  # a flag for inexact newton
+
+#-snes_rtol 1e-20
+###################################################
+
+#-ksp_monitor
+#-ksp_view
+-ksp_converged_reason
+#-ksp_rtol 1e-3
+
+-ksp_type fgmres
+#-ksp_gmres_restart 100 # longer restrat better convergence and slower speed
+-ksp_gmres_restart 75 # longer restrat better convergence and slower speed
+#-ksp_gmres_restart 50
+#-ksp_gmres_restart 30
+-ksp_gmres_modifiedgramschmidt # more stable but a bit slower
+
+#-ksp_gmres_cgs_refinement_type refine_ifneeded # help the solver to convrege, but also make it a bit slower
+#-ksp_gmres_cgs_refinement_type refine_always # help the solver to convrege, but also make it a bit slower
+#<refine_never,refine_ifneeded,refine_always>
+
+# convergent 
+## KSPSetType(pn_ksp,KSPPIPEFGMRES); /* fast */
+## KSPSetType(pn_ksp,KSPDGMRES);
+## KSPSetType(pn_ksp,KSPLGMRES); 
+## KSPSetType(pn_ksp,KSPGMRES);
+## KSPSetType(pn_ksp,KSPPGMRES); /* slow */
+
+# not convergent
+## KSPSetType(pn_ksp,KSPTFQMR);
+## KSPSetType(pn_ksp,KSPTCQMR);
+## KSPSetType(pn_ksp,KSPCGS);
+## KSPSetType(pn_ksp,KSPBCGS);
+## KSPSetType(pn_ksp,KSPCG);
