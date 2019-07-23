@@ -125,6 +125,7 @@ double u_exact(const Vector & x){
 			return 
 //					0.1 *
 //					0.5 *
+//					0.1;
 					sin( kr * (r+r0) ) * cos( kz*z);
 		}
 		else{
