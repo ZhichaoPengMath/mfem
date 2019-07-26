@@ -25,6 +25,7 @@
 using namespace std;
 using namespace mfem;
 
+//double petsc_linear_solver_rel_tol = 1e-8;
 double petsc_linear_solver_rel_tol = 1e-16;
 
 /**********************************************************/
@@ -91,6 +92,7 @@ private:
 	BlockDiagonalPreconditioner * prec;
 	HypreBoomerAMG * prec0;
 	HypreBoomerAMG * prec1;
+//	HypreAMS * prec2;
 	Solver * prec2;
 //	PetscLinearSolver * prec3;
 	HypreBoomerAMG * prec3;
@@ -200,6 +202,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	prec1->SetPrintLevel(0);
 
 	prec2 = new HypreAMS( *matVhat, qhat_space );
+//	prec2->SetPrintLevel(1);
 	
 	prec3 = new HypreBoomerAMG( *matShat );
 	prec3->SetPrintLevel(0);
@@ -226,7 +229,9 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 //	solver = new FGMRESSolver(MPI_COMM_WORLD);
 	solver = new PetscLinearSolver(MPI_COMM_WORLD);
 	solver->SetRelTol(petsc_linear_solver_rel_tol);
-	solver->SetMaxIter(2500);
+	solver->SetMaxIter(10000);
+//	solver->SetPrintLevel(1000);
+//	solver->SetMaxIter(2500);
 //	solver->SetPreconditioner(*P);
 	solver->SetPreconditioner(*prec);
 }

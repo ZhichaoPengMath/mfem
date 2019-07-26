@@ -708,7 +708,6 @@ int main(int argc, char *argv[])
 	//     Wrap the primal variable in a GridFunction for visualization purposes.
 
 	   StopWatch timer;
-	   timer.Start();
 	   if(!use_petsc){
 		   if(myid == 0){
 				cout<<"Wrong! PETSC is not used!"<<endl<<endl;
@@ -733,6 +732,7 @@ int main(int argc, char *argv[])
 
 			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
 			Vector bb;
+			timer.Start();
 		    petsc_newton->Mult(bb,x);
 
 

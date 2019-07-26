@@ -39,6 +39,22 @@ double nonlinear_source(double u, const Vector &x)
 		double kr = 1.15*M_PI, kz = 1.15;
 		return (kr*kr+kz*kz)/x(0)*u -u*u - exp(-u);
 	}
+	else if (sol_opt == 4){	
+		double sigma2=0.05, c1 = 0.8, c2 = 0.2;
+//		double sigma2=0.005, c1 = 0.8, c2 = 0.2;// really really bad convergence
+		double r=x(0), res = 0.;
+
+		res = 2.*r*u*
+			  (
+			   c2 * (1-exp(-u*u/sigma2) ) 
+			  +1./sigma2 * (c1+c2*u*u) * exp(-u*u/sigma2)
+			  );
+		return res;
+	}
+	else if (sol_opt == 5){
+		double r = x(0);
+		return r*(1. - 0.5 * (1-u*u)*(1-u*u) );
+    }
 	else{
 		return u - 0.5*u*u;
 	}
@@ -54,6 +70,35 @@ double derivative_of_nonlinear_source(double u,const Vector &x)
 		double kr = 1.15*M_PI, kz = 1.15;
 		return (kr*kr+kz*kz)/x(0) -2*u + exp(-u);
 	}
+	else if(sol_opt == 4){
+		double sigma2=0.05, c1 = 0.8, c2 = 0.2; // fine
+//		double sigma2=0.005, c1 = 0.8, c2 = 0.2;// really really bad convergence
+		double r=x(0), res = 0.;
+
+		res = 2.*r*(
+				c2*(1-exp(-u*u/sigma2)  )
+			    +1./sigma2 * (c1+c2*u*u) * exp(-u*u/sigma2) 
+			  )
+			 +4.*r*c2*u/sigma2*exp(-u*u/sigma2)
+			 -4.*r*u/sigma2/sigma2* (c1 + c2*u*u) * exp(-u*u/sigma2)
+			 +4.*r*u/sigma2* c2*u*exp(-u*u/sigma2)
+			 ;
+		
+//		res = 
+//			 2.*r*( c2 * ( 1 - exp(- u*u/sigma2) )
+//			  +1./sigma2 * (c1+c2*u*u) * exp(-u*u/sigma2)
+//			 )
+//			 +2.*r*u*
+//			 ( c2 * 2.*u/sigma2 * exp(- u*u/sigma2) 
+//			  -2.*u/sigma2/sigma2 * (c1+c2*u*u) * exp(-u*u/sigma2)
+//			  +2./sigma2 * c2*u * exp(-u*u/sigma2)
+//			 );
+		return res;
+	}
+	else if(sol_opt == 5){
+		double r=x(0);
+    	return r*(1-u*u)*(1-u*u)* 2 * u;
+    }
 	else{
 		return 1. - u;
 	}
@@ -123,10 +168,13 @@ double u_exact(const Vector & x){
 		else if(sol_opt == 3){
 			double r0 = -0.5, kr = 1.15*M_PI, kz = 1.15;
 			return 
-//					0.1 *
-//					0.5 *
-//					0.1;
 					sin( kr * (r+r0) ) * cos( kz*z);
+		}
+		else if(sol_opt == 4){
+			return 0.25;
+		}
+		else if(sol_opt == 5){
+			return 0.;
 		}
 		else{
 			return 0;
@@ -216,6 +264,9 @@ double linear_source(const Vector & x){
 			return  
 				  kr/r/r * cos( kr*(r+r0) ) * cos(kz * z)
 				  + u*u + exp(-u);
+		 }
+		 else if(sol_opt == 4){
+			return 0;
 		 }
 		 else{
 			return 0;
