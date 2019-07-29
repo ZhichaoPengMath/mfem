@@ -45,6 +45,7 @@ int main(int argc, char *argv[])
 
    int prec_amg = 1;
    double amg_perturbation = 1e-3;
+   bool perturb = false;
 
    bool use_petsc = true;
    bool use_factory = true;
@@ -102,6 +103,9 @@ int main(int argc, char *argv[])
    args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
 				  " use lower order rt trace or not, 0 by default");
 
+   args.AddOption(&petsc_linear_solver_rel_tol, "-petsc_ls_rtol", "--petsc_ls_rtol",
+				  " use lower order rt trace or not, 0 by default");
+
 
 
    args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
@@ -112,6 +116,11 @@ int main(int argc, char *argv[])
 
    args.AddOption(&prec_amg, "-prec_amg", "--prec_amg",
 				  " use a perturbed amg preconditionner for the last diagonal block or not, 1 by default");
+
+   args.AddOption(&perturb, "-perturb", "--perturb", "-no_perturb",
+                  "--not perturb precondiitioner",
+                  "Enable perturb preconditioner or not, by derfault not do that");
+
    args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
 				  " the perturbation for the last diagonal block in the preconditioner");
 
@@ -128,6 +137,12 @@ int main(int argc, char *argv[])
    }
    else if(sol_opt == 3){
 		mesh_file = "../../data/ITER_double_null.mesh";
+   }
+   else if(sol_opt == 4){
+		mesh_file = "../../data/cerfon_iter_quad.mesh";
+   }
+   else if(sol_opt == 5){
+		mesh_file = "../../data/cerfon_iter_quad.mesh";
    }
    else{
 		mesh_file = "../../data/inline-quad-pzc2.mesh";
@@ -152,8 +167,6 @@ int main(int argc, char *argv[])
 
    // 1b. We initialize PETSc
    if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
-
-   if (use_petsc) { amg_perturbation = 1e-3; }
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -324,12 +337,8 @@ int main(int argc, char *argv[])
    uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0); /* Question should I use TRef or Ref here ? */
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
-//   for(int i = 0;i<uhat.Size();i++){
-//		cout<<i<<": "<<uhat(i)<<endl;
-//   }
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
-
    FunctionCoefficient f_coeff( linear_source );/* coefficients */
    ParLinearForm * linear_source_operator(new ParLinearForm(stest_space) );
 //   linear_source_operator->Update(stest_space, F.GetBlock(1) ,0);
@@ -615,8 +624,17 @@ int main(int argc, char *argv[])
 	   ParMixedBilinearForm *Sjump = NULL;
 	   HypreParMatrix * matSjump = NULL;
 	   HypreParMatrix * Shat = NULL;
-	   if(prec_amg == 1){
+
+	   /* By default use petsc to define the AMG preconditioner for the
+		* third block Shat, and no need to perturb Shat.
+		* However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
+		* to make it work */
+	   if(!perturb){
+			Shat = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+	   }
+	   else{
 		    amg_perturbation = min(1e-3, amg_perturbation);
+			cout<<amg_perturbation<<endl;
 			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
 	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
 	   		Sjump->Assemble();
@@ -629,57 +647,7 @@ int main(int argc, char *argv[])
 	        Shat = RAP(matSjump, matVinv, matSjump);
 	   }
 	   /********************************************************/
-	   HypreParMatrix * Shat2  = NULL;
-	   if(prec_amg != 1){
-			Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
-	   }
-//	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
-//   	   Operator *Vhatinv=NULL;// *Shatinv=NULL;
-////   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
-//	   HypreBoomerAMG *Shatinv = NULL;
-	   
-//	   V0inv = new HypreBoomerAMG( *matV0 );
-//	   V0inv->SetPrintLevel(0);
-//	   S0inv = new HypreBoomerAMG( *AmatS0 );
-//	   S0inv->SetPrintLevel(0);
-//	   if(vhat_amg){
-//			Vhatinv = new HypreBoomerAMG( *Vhat );
-//			Vhatinv = new HypreSmoother(*Vhat);
-//	   }
-//	   else{
-//	      if (dim == 2) { Vhatinv = new HypreAMS(*Vhat, qhat_space); }
-//   	      else          { Vhatinv = new HypreADS(*Vhat, qhat_space); }
-//	   }
-	   
-//	   double prec_rtol = 1e-3;
-//	   int prec_maxit = 200;
-//	   BlockDiagonalPreconditioner P(offsets);
-//	   P.SetDiagonalBlock(0, V0inv);
-//	   P.SetDiagonalBlock(1, S0inv);
-//	   P.SetDiagonalBlock(2, Vhatinv);
-//
-//	   HyprePCG *Shatinv2=NULL;
-//	   if (prec_amg == 1)
-//	   {
-//	   	  Shatinv = new HypreBoomerAMG( *Shat );
-//		  Shatinv->SetPrintLevel(0);
-//	      P.SetDiagonalBlock(3, Shatinv);
-//	   }
-//	   else
-//	   {
-//		  if(user_pcg_prec_rtol>0){
-//	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
-//	   	  }
-//	   	  if(user_pcg_prec_maxit>0){
-//	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
-//	   	  }
-//		  Shatinv2 = new HyprePCG( *Shat2 );
-//	      Shatinv2->SetPrintLevel(0);
-//	      Shatinv2->SetTol(prec_rtol);
-//	      Shatinv2->SetMaxIter(prec_maxit);
-//	      P.SetDiagonalBlock(3, Shatinv2);
-//	   }
-	
+
 	   /*******************************************************************************
 		* 9b pass all the pointer to the infomration interfce,
 		* everything is passed to PETSC by FixedPointReducedSystemOperator,
@@ -687,6 +655,7 @@ int main(int argc, char *argv[])
 		* ******************************************************************************/
 	   FixedPointReducedSystemOperator * reduced_system_operator = new FixedPointReducedSystemOperator(
 												&use_petsc,
+												&perturb,
 												u0_space, q0_space, uhat_space, qhat_space,
 												vtest_space, stest_space,
 												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
@@ -699,7 +668,6 @@ int main(int argc, char *argv[])
 												ess_trace_vdof_list,
 												&b,
 												F,
-//												&P,
 												linear_source_operator
 			   );
 
@@ -721,14 +689,9 @@ int main(int argc, char *argv[])
 			petsc_newton->SetMaxIter(250000);
 			petsc_newton->SetPrintLevel(1);
 
-			SNES pn_snes(*petsc_newton);
+			petsc_newton->iterative_mode = true;
 
-			/* not convergent */
-//			KSPSetType(pn_ksp,KSPTFQMR);
-//			KSPSetType(pn_ksp,KSPTCQMR);
-//			KSPSetType(pn_ksp,KSPCGS);
-//			KSPSetType(pn_ksp,KSPBCGS);
-//			KSPSetType(pn_ksp,KSPCG);
+			SNES pn_snes(*petsc_newton);
 
 			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
 			Vector bb;
@@ -890,14 +853,7 @@ int main(int argc, char *argv[])
    delete AmatS0;
    delete matV0;
    delete Vhat;
-   delete Shat2;
    delete Shat;
-//   /* preconditionner */
-//   delete V0inv;
-//   delete S0inv;
-//   delete Vhatinv;
-//   delete Shatinv;
-//   delete Shatinv2;
    /* finite element collection */
    delete u0_fec;
    delete q0_fec;

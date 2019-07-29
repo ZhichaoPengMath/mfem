@@ -31,15 +31,29 @@
 
 
 -snes_stol 1e-16
--snes_rtol 1e-12
+#-snes_rtol 1e-12
+-snes_rtol 1e-11
+-snes_atol 1e-11
 #-snes_rtol 1e-20
-###################################################
+
+#####################################################
+# Options for the third block of the block Jacobian 
+# preconditioner
+#####################################################
+#-s3_ksp_monitor
+#-s3_ksp_view
+#-s3_ksp_converged_reason
+-s3_ksp_rtol 1e-8
+#-s3_ksp_type preonly
 ###################################################
 
+#################################################
+# Options for KSP solvers invert J^TG^{-1}B
+#################################################
 #-ksp_monitor
 #-ksp_view
 -ksp_converged_reason
-#-ksp_rtol 1e-3
+-ksp_rtol 1e-12
 
 ###################################################
 -ksp_type fgmres
@@ -60,5 +74,4 @@
 #-ksp_type cgs # not convergent
 #-ksp_type tfqmr # not convergent
 
-###################################################
 ###################################################
