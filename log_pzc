@@ -4,3 +4,14 @@
 (3) Add practice examples:
 	ex1_pzc.cpp ex14_pzc.cpp  ex8_pzc.cpp
 
+2019/07/29
+(1) Difference between 
+	FiniteElementSpace->Update(true) and Update(false)
+			use an interpolation		 Not use that
+(2) FiniteElementSpace->Update(false) + GridFunction->GetTrueDof( vector )
+may calse trouble as the interpolation is not specified, and this may cause
+random initialization
+What we should do, it is to update the vector size and mannually refine it.
+
+(3) L2_Interface, RT_Trace, H1_Trace may only support Update(false)
+
