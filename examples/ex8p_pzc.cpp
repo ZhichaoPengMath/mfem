@@ -333,14 +333,15 @@ int main(int argc, char *argv[])
   // Compute throught DPG formulation
   // (q,\tau) - (\grad u,\tau ) = 0
 
+   ParGridFunction * q0=NULL;
    if( compute_q ){
 	   FiniteElementCollection * q0_fec = new L2_FECollection(trial_order, dim);
 	   
 	   ParFiniteElementSpace * q0_space    = new ParFiniteElementSpace(mesh, q0_fec, dim);
 	   ParFiniteElementSpace * vtest_space = new ParFiniteElementSpace(mesh, test_fec, dim);
 	
-	   ParGridFunction q0(q0_space);
-	   q0 = 0.; /* never forget to initialize */
+	   q0 = new ParGridFunction(q0_space);
+	   *q0 = 0.; /* never forget to initialize */
 
 	   if(compute_q == 2){
 		   if(myid == 0){
@@ -413,7 +414,7 @@ int main(int argc, char *argv[])
 		   qcg.SetRelTol(1e-10);
 		   qcg.SetMaxIter(200);
 		   qcg.SetPrintLevel(1);
-		   qcg.Mult(rhs_q, q0);
+		   qcg.Mult(rhs_q, *q0);
 
 		   delete AQ;
 		   delete MQ;
@@ -477,7 +478,7 @@ int main(int argc, char *argv[])
 			qcg.SetPrintLevel(0);
 			qcg.SetOperator( *AQ);
 			qcg.SetPreconditioner(*MQ);
-			qcg.Mult( rhs_q, q0);
+			qcg.Mult( rhs_q, *q0);
 
 			delete AQ;
 			delete MQ;
@@ -485,7 +486,7 @@ int main(int argc, char *argv[])
 	   }
 	   VectorFunctionCoefficient q_coeff(dim, q_exact);
 //	   q0.ProjectCoefficient(q_coeff);
-	   q_error = q0.ComputeL2Error(q_coeff);
+	   q_error = q0->ComputeL2Error(q_coeff);
 	}	
 
 /*******************************************************************************/
@@ -532,6 +533,13 @@ int main(int argc, char *argv[])
       sol_sock << "parallel " << num_procs << " " << myid << "\n";
       sol_sock.precision(8);
       sol_sock << "solution\n" << *mesh << * x0 << flush;
+
+	  if(compute_q){
+	     socketstream q_sock(vishost, visport);
+		 q_sock << "parallel " << num_procs << " " << myid << "\n";
+      	 q_sock.precision(8);
+      	 q_sock << "grad\n" << *mesh << *q0 << flush;
+	  }
    }
 
    // 13. Free the used memory.

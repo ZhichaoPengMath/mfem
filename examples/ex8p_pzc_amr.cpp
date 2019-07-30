@@ -54,6 +54,7 @@ void ElementInnerProduct( FiniteElementSpace * fes,
 
 
 double alpha_pzc = 100.;
+int sol_opt = 0;
 
 int main(int argc, char *argv[])
 {
@@ -62,6 +63,12 @@ int main(int argc, char *argv[])
    MPI_Init(&argc, &argv);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+   int amr_level = 5;
+   /* max number of allowable hanging nodes */
+   int num_hanging_node_limit = 3;
+//   int num_hanging_node_limit = 2;
+    double ref_threshold = 0.25;
 
    const char *mesh_file = "../data/star.mesh";
    int order = 1;
@@ -73,6 +80,8 @@ int main(int argc, char *argv[])
    double q_error =-100000.;
 
    bool amr = true;
+
+   bool bool_triangle_nonconforming = true;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -88,12 +97,29 @@ int main(int argc, char *argv[])
 
    args.AddOption(&alpha_pzc, "-alpha", "--alpha",
                   "arctan( alpha * x) as exact solution");
+
+   args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
+                  "sol_opt=0: sin cos polynomial, else arctan");
+
    args.AddOption(&ref_levels, "-r", "--refine",
                   "Number of times to refine the mesh uniformly");
    args.AddOption(&compute_q, "-cq", "--cq",
                   "compute q = grad(u) or not, 1 use L2 projection of grad(u), 2 use DPG, 0 by default do not compute it ");
    args.AddOption(&trace_opt, "-trace", "--trace",
                   "trace_order = trial_order, by default trace_order = trial_order - 1 ");
+
+   args.AddOption(&bool_triangle_nonconforming, "-tri_non", "--tri_non", "-tri_conf",
+                  "-tri_conf",
+                  "Conforming or nonconforming triangle mesh");
+
+   args.AddOption(&amr_level, "-amr_level", "--amr_level",
+                  "level of adaptive mesh refinement");
+
+   args.AddOption(&ref_threshold, "-amr_rel_tol", "--amr_rel_tol",
+                  "relative threshold for adaptive mesh refinement");
+
+   args.AddOption(&num_hanging_node_limit, "-nc_limit", "--nc_limit",
+                  "number of hanging node limit");
 
 
    args.Parse();
@@ -110,6 +136,7 @@ int main(int argc, char *argv[])
    Mesh *serial_mesh = new Mesh(mesh_file, 1, 1);
    int dim = serial_mesh->Dimension();
 
+
    // 2b. Refine the mesh to increase the resolution. In this example we do
    //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
    //    largest number that gives a final mesh with no more than 10,000
@@ -123,6 +150,9 @@ int main(int argc, char *argv[])
    {
       serial_mesh->UniformRefinement();
    }
+
+   /* this line is important */
+   serial_mesh->EnsureNCMesh( bool_triangle_nonconforming );
 
    // 2c. Parioning the mesh on each processor and do the refinement
    ParMesh *mesh = new ParMesh(MPI_COMM_WORLD, *serial_mesh);
@@ -265,7 +295,7 @@ int main(int argc, char *argv[])
    HypreParMatrix * matS0=NULL;
    HypreParVector * VecF=NULL;
 
-   for(int amr_iter = 0; amr_iter<10;amr_iter++){
+   for(int amr_iter = 0;amr_iter<amr_level+1 ;amr_iter++){
 	   /* update the right hand side */
        F->Assemble();
 
@@ -314,12 +344,6 @@ int main(int argc, char *argv[])
        matSinv = Sinv->ParallelAssemble();  //delete Sinv;
        matS0   = S0->ParallelAssemble();    //delete S0;
 
-       cout<< "B0:   "<<myid<<" "<<matB0->Height() <<" X "<<matB0->Width()<<endl
-           << "Bhat: "<<myid<<" "<<matBhat->Height() <<" X "<<matBhat->Width()<<endl
-           << "Sinv: "<<myid<<" "<<matSinv->Height()<< " X "<<matSinv->Width()<<endl
-		   << " x0:  "<<myid<<" "<<x0->Size()<<endl
-		   <<" xhat: "<<myid<<" "<<xhat->Size()<<endl
-           <<endl;
        // 10. Set up the 1x2 block Least Squares DPG operator, B = [B0  Bhat],
        //    the normal equation operator, A = B^t Sinv B, and
        //    the normal equation right-hand-size, b = B^t Sinv F.
@@ -328,16 +352,12 @@ int main(int argc, char *argv[])
        B->SetBlock(0,1,matBhat);
        RAPOperator *A = new RAPOperator(*B, *matSinv, *B);
 
-       cout<<"rank "<<myid<<" operator assembled "<<endl;
 
        VecF = F->ParallelAssemble();
        {
           HypreParVector SinvF(test_space);
           matSinv->Mult(*VecF,SinvF);
           B->MultTranspose(SinvF, b);
-       }
-       if(myid==0){
-        	cout<<endl<<"Right Handside calculated"<<endl;
        }
 
        //11. Set up a block-diagonal preconditioner for the 2x2 normal equation
@@ -370,7 +390,7 @@ int main(int argc, char *argv[])
        pcg->SetPreconditioner(*P);
        pcg->SetRelTol(1e-7);
        pcg->SetMaxIter(2000);
-       pcg->SetPrintLevel(1);
+       pcg->SetPrintLevel(3);
        pcg->Mult(b, x);
 
 	   delete Shatinv;
@@ -412,10 +432,10 @@ int main(int argc, char *argv[])
           sol_sock << "solution\n" << *mesh << * x0 << flush;
        }
 /**    **********************************************************************************/
-	   // 13 . Adaptive mesh Refinement
+	   // 14 . Adaptive mesh Refinement
        if(amr)
        {
-		   // 13a. get error estimator
+		   // 14a. get error estimator
           HypreParVector VEstimator(test_space), VResidual(test_space);
           B->Mult(x,VResidual);
           VResidual -= *VecF;
@@ -439,88 +459,142 @@ int main(int argc, char *argv[])
 
 		  // stop mesh refien ment when the dofs are too many 
 		  HYPRE_Int global_trial_dofs = x0_space->GlobalTrueVSize() + xhat_space->GlobalTrueVSize();
-		  if(global_trial_dofs>10000){
+		  if(global_trial_dofs>1000000){
 		    	break;
 		  }
 
-		  if(myid == 0){
-			cout<<" error estimated "<<endl;
-		  }
-		  // 13b. refien the mesh
+		  // 14b. refien the mesh
 		  /* coloring the element needs to be refined */
 		  Array<int> refine_color;
-		  double ref_threshold = 0.05;
+		  double rank_max_local_error = local_error_estimator.Max(); /* max local error on current rank */
+		  double max_local_error = 0.; /* max local error */
+		  MPI_Allreduce(&rank_max_local_error,&max_local_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+
 		  for(int i=0; i <mesh->GetNE(); i++){
-			if( local_error_estimator(i) > ref_threshold*global_error_estimator ){
+		   if(  
+			    (local_error_estimator(i) > ref_threshold*max_local_error)
+			 ){
 				refine_color.Append(i);
 			}
-		  }
-		  if(myid == 0){
-			cout<<endl<<" mesh coloured "<<endl;
 		  }
 
 		  /* refine the mesh */
 		  int num_ref = mesh->ReduceInt(refine_color.Size() );
-		  cout<<endl<<num_ref<<" elements need to be refined"<<endl;
-		  int nc_limit = 2;
+		  if(myid==0){
+			 cout<<num_ref<<" elements needs to be refined "<<endl;	
+		  }
 		  if(num_ref){
-			 mesh->GeneralRefinement( refine_color, 1, nc_limit );
+			 if(bool_triangle_nonconforming){
+				mesh->GeneralRefinement( refine_color, 1, num_hanging_node_limit );
+			 }
+			 else{
+				mesh->GeneralRefinement( refine_color, -1, num_hanging_node_limit );
+			 }
+			 /* second: 1 non-conforming, 0 conforming, -1 decide by the code itself */
+			 int total_element_num = mesh->GetNE();
 			 if(myid==0){
 				cout<<num_ref<<" elements are refined "<<endl;	
+				cout<<"Refinement "<< amr_iter<<" with "<<total_element_num<<" elements "<<endl<<endl; 
 			 }
 		  }
+
 
 //		  mesh->UniformRefinement();
 //		  cout<<"mesh refined"<<endl;cout<<endl;
 
 
-		  //13c. Update the finite element space and the binlinear forms 
-		  
-		  /* Get old  GridFunctions to make sure they match with the block vector */
-		  x0->SetFromTrueDofs(x.GetBlock(0));
-		  xhat->SetFromTrueDofs(x.GetBlock(0));
-		  
-		  /* upate finite element spaces */
-		  test_space->Update();
-		  x0_space->Update();
-		  xhat_space->Update(false);
+		  //14c. Update the finite element space and the binlinear forms 
+		 if(num_ref){ 
+			/* Get old  GridFunctions to make sure they match with the block vector */
+		 	x0->SetFromTrueDofs(x.GetBlock(0));
+		 	xhat->SetFromTrueDofs(x.GetBlock(0));
+		 	
+		 	/* upate finite element spaces */
+		 	test_space->Update();
+		 	x0_space->Update();
+		 	xhat_space->Update(false);
 
-		  piecewise_const_space->Update();
-		  /* update grid functions */
-		  x0->Update();
-		  xhat->Update();
-		  /* update  linear form */
-		  F->Update();
+		 	piecewise_const_space->Update();
+		 	/* update grid functions */
+		 	x0->Update();
+		 	xhat->Update();
+		 	/* update  linear form */
+		 	F->Update();
 
-		  /* update bilinear form */
-		  B0->Update();
-		  Bhat->Update();
-		  Sinv->Update();
-		  S0->Update();
+		 	/* update bilinear form */
+		 	B0->Update();
+		 	Bhat->Update();
+		 	Sinv->Update();
+		 	S0->Update();
 
 
-		  /* update block sizes */
-		  offsets[0] = 0;
-		  offsets[1] = x0_space->TrueVSize();
-   		  offsets[2] = offsets[1]+xhat_space->TrueVSize();
+		 	/* update block sizes */
+		 	offsets[0] = 0;
+		 	offsets[1] = x0_space->TrueVSize();
+   		 	offsets[2] = offsets[1]+xhat_space->TrueVSize();
 
-		  offsets_test[0] = 0;
-		  offsets_test[1] = test_space->TrueVSize();
+		 	offsets_test[0] = 0;
+		 	offsets_test[1] = test_space->TrueVSize();
 
-		  /* resize block vectors */
-		  x.Update(offsets);
-		  b.Update(offsets);
-		  x = 0.;
-		  b = 0.;
+		 	/* resize block vectors */
+		 	x.Update(offsets);
+		 	b.Update(offsets);
+		 	x = 0.;
+		 	b = 0.;
 
-		  /* store the grid function in x */
-//		  x0->GetTrueDofs(x.GetBlock(0) );
-//		  xhat->GetTrueDofs(x.GetBlock(1) ); /* this line may ruin the code as we do not have a way for the interpolation of xhat,as we use xhat_space->Update(false) */
+//			x0->GetTrueDofs(x.GetBlock(0) );
+         }
+		 else{
+		    delete B;
+	   	    delete A;
+			break;
+		 }
 
+		  // 14c. load balancing
+		  if( mesh->Nonconforming() ){
+			 mesh->Rebalance();
+			 /* Get old  GridFunctions to make sure they match with the block vector */
+		 	 x0->SetFromTrueDofs(x.GetBlock(0));
+		 	 xhat->SetFromTrueDofs(x.GetBlock(0));
+		 	 
+		 	 /* upate finite element spaces */
+		 	 test_space->Update();
+		 	 x0_space->Update();
+		 	 xhat_space->Update(false);
+
+		 	 piecewise_const_space->Update();
+		 	 /* update grid functions */
+		 	 x0->Update();
+		 	 xhat->Update();
+		 	 /* update  linear form */
+		 	 F->Update();
+
+		 	 /* update bilinear form */
+		 	 B0->Update();
+		 	 Bhat->Update();
+		 	 Sinv->Update();
+		 	 S0->Update();
+
+
+		 	 /* update block sizes */
+		 	 offsets[0] = 0;
+		 	 offsets[1] = x0_space->TrueVSize();
+   		 	 offsets[2] = offsets[1]+xhat_space->TrueVSize();
+
+		 	 offsets_test[0] = 0;
+		 	 offsets_test[1] = test_space->TrueVSize();
+
+		 	 /* resize block vectors */
+		 	 x.Update(offsets);
+		 	 b.Update(offsets);
+		 	 x = 0.;
+		 	 b = 0.;
+
+//			x0->GetTrueDofs(x.GetBlock(0) );
+		  }
 		  /* free memory for block operators */
 		  delete B;
 	   	  delete A;
-
        } /* end of mesh refinement loop */
    } /*end of  amr loop */
    // 14. Free the used memory.
@@ -553,13 +627,15 @@ int main(int argc, char *argv[])
 //  - u'' = f
 double f_exact(const Vector & x){
 	if(x.Size() == 2){
-		return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
-
-		return 2*M_PI*M_PI*sin(M_PI*x(0) ) * sin(M_PI*x(1) );
-//		double yy = x(1) - 0.5;
-//		return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
-//				(1+alpha_pzc*alpha_pzc*yy*yy )/
-//				(1+alpha_pzc*alpha_pzc*yy*yy );
+		if(sol_opt == 0){
+			return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+		}
+		else{
+			double yy = x(1) - 0.5;
+			return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
+					(1+alpha_pzc*alpha_pzc*yy*yy )/
+					(1+alpha_pzc*alpha_pzc*yy*yy );
+		}
 	}
 	else if(x.Size() == 1){
 //		return   2*alpha_pzc*alpha_pzc*alpha_pzc*x(0)/
@@ -577,11 +653,15 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
-//		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
+		if(sol_opt == 0){
+			return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+		}
+		else{
+			return atan(alpha_pzc* (x(1) - 0.5) );
+		}
 	}
 	else if(x.Size() == 1){
-//		return atan(alpha_pzc * x(0) );
+		return atan(alpha_pzc * x(0) );
 		return sin(2. * M_PI* x(0) ) ;
 	}
 	else{
@@ -593,15 +673,14 @@ double u_exact(const Vector & x){
 /* grad exact solution */
 void q_exact( const Vector & x, Vector & f){
 	if(x.Size() == 2){
-		f(0) = +1. + 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
-		f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
-
-//		f(0) = M_PI*cos(M_PI*x(0) ) * sin( M_PI* x(1) );
-//		f(1) = M_PI*sin(M_PI*x(0) ) * cos( M_PI* x(1) );
-
-//		f(0) = 0.;
-//		f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1)-0.5) * (x(1)-0.5) );
-		
+		if(sol_opt ==  0){
+			f(0) = +1. + 2.*M_PI*cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
+			f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
+		}
+		else{
+			f(0) = 0.;
+			f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1)-0.5) * (x(1)-0.5) );
+		}
 	}
 	else if(x.Size() == 1){
 		f(0) = 2.*M_PI*cos(2. * M_PI * x(0) );
