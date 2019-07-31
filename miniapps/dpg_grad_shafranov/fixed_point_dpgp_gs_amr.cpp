@@ -1,5 +1,5 @@
 #include "mfem.hpp"
-#include "fixed_point_reduced_system_operator.hpp"
+#include "fixed_point_reduced_system_operator_amr.hpp"
 //#include "RHSCoefficient.hpp"
 #include <fstream>
 #include <iostream>

@@ -149,9 +149,11 @@ int main(int argc, char *argv[])
    xhat_fec = new RT_Trace_FECollection(trace_order, dim);
    test_fec = new L2_FECollection(test_order, dim);
 
-   ParFiniteElementSpace *x0_space   = new ParFiniteElementSpace(mesh, x0_fec);
-   ParFiniteElementSpace *xhat_space = new ParFiniteElementSpace(mesh, xhat_fec);
-   ParFiniteElementSpace *test_space = new ParFiniteElementSpace(mesh, test_fec);
+   ParFiniteElementSpace *x0_space, *xhat_space, *test_space;
+
+   x0_space   = new ParFiniteElementSpace(mesh, x0_fec);
+   xhat_space = new ParFiniteElementSpace(mesh, xhat_fec);
+   test_space = new ParFiniteElementSpace(mesh, test_fec);
 
    HYPRE_Int global_s0 = x0_space->GlobalTrueVSize();
    HYPRE_Int global_s1 = xhat_space->GlobalTrueVSize();
@@ -176,23 +178,22 @@ int main(int argc, char *argv[])
    //    and rhs.
    enum {x0_var, xhat_var, NVAR};
 
-   int s0 = x0_space->TrueVSize();
-   int s1 = xhat_space->TrueVSize();
-   int s_test = test_space->TrueVSize();
+   int true_s0     = x0_space->TrueVSize();
+   int true_s1     = xhat_space->TrueVSize();
+   int true_s_test = test_space->TrueVSize();
 
-   Array<int> offsets(NVAR+1);
-   offsets[0] = 0;
-   offsets[1] = s0;
-   offsets[2] = s0+s1;
+   Array<int> true_offsets(NVAR+1);
+   true_offsets[0] = 0;
+   true_offsets[1] = true_s0;
+   true_offsets[2] = true_s0+true_s1;
 
-   Array<int> offsets_test(2);
-   offsets_test[0] = 0;
-   offsets_test[1] = s_test;
+   Array<int> true_offsets_test(2);
+   true_offsets_test[0] = 0;
+   true_offsets_test[1] = true_s_test;
 
-   BlockVector x(offsets), b(offsets);
-   b = 0.;
-   x = 0.;
-
+   BlockVector x(true_offsets), b(true_offsets);
+   x = 0.0;
+   b = 0.0;
 
    // 6. Set up the linear form F(.) which corresponds to the right-hand side of
    //    the FEM linear system, which in this case is (f,phi_i) where f=1.0 and
@@ -205,21 +206,15 @@ int main(int argc, char *argv[])
    F->AddDomainIntegrator(new DomainLFIntegrator(f_coeff));
    F->Assemble();
 
-
-   if(myid==0){
-		cout<<endl<<"Righthandside assembled"<<endl;
-   }
-
    // 6. Deal with boundary conditions
    Array<int> ess_bdr(mesh->bdr_attributes.Max());
    ess_bdr = 1;
    Array<int> ess_dof;
    x0_space->GetEssentialVDofs(ess_bdr, ess_dof);
-   cout<<endl<<"Essential vdof "<<ess_dof.Size()<<endl<<endl;
 
    ParGridFunction * x0 = new ParGridFunction(x0_space);
    x0->MakeTRef(x0_space, x.GetBlock(x0_var) );
-   x0->ProjectCoefficient(u_coeff);
+   *x0 = 0.;
 
    // 7. Set up the mixed bilinear form for the primal trial unknowns, B0,
    //    the mixed bilinear form for the interfacial unknowns, Bhat,
@@ -260,24 +255,20 @@ int main(int argc, char *argv[])
    HypreParMatrix * matSinv = Sinv->ParallelAssemble();  delete Sinv;
    HypreParMatrix * matS0   = S0->ParallelAssemble();    delete S0;
 
-   cout<< "B0:   "<<myid<<" "<<matB0->Height() <<" X "<<matB0->Width()<<endl
-       << "Bhat: "<<myid<<" "<<matBhat->Height() <<" X "<<matBhat->Width()<<endl
-	   << "Sinv: "<<myid<<" "<<matSinv->Height()<< " X "<<matSinv->Width()<<endl
-	   <<endl;
    // 8. Set up the 1x2 block Least Squares DPG operator, B = [B0  Bhat],
    //    the normal equation operator, A = B^t Sinv B, and
    //    the normal equation right-hand-size, b = B^t Sinv F.
-   BlockOperator B(offsets_test, offsets);
+   BlockOperator B(true_offsets_test, true_offsets);
    B.SetBlock(0,0,matB0);
    B.SetBlock(0,1,matBhat);
    RAPOperator A(B, *matSinv, B);
 
    cout<<"rank "<<myid<<" operator assembled "<<endl;
 
-   HypreParVector *VecF = F->ParallelAssemble();
+   HypreParVector *trueF = F->ParallelAssemble();
    {
       HypreParVector SinvF(test_space);
-      matSinv->Mult(*VecF,SinvF);
+      matSinv->Mult(*trueF,SinvF);
       B.MultTranspose(SinvF, b);
    }
    if(myid==0){
@@ -302,7 +293,7 @@ int main(int argc, char *argv[])
    if (dim == 2) { Shatinv = new HypreAMS(*Shat, xhat_space); }
    else          { Shatinv = new HypreADS(*Shat, xhat_space); }
 
-   BlockDiagonalPreconditioner P(offsets);
+   BlockDiagonalPreconditioner P(true_offsets);
    P.SetDiagonalBlock(0, S0inv);
    P.SetDiagonalBlock(1, Shatinv);
 
@@ -320,15 +311,18 @@ int main(int argc, char *argv[])
    {
       HypreParVector LSres(test_space), tmp(test_space);
       B.Mult(x, LSres);
-      LSres -= *VecF;
+      LSres -= *trueF;
       matSinv->Mult(LSres, tmp);
       double res = sqrt(InnerProduct(LSres, tmp));
       if (myid == 0)
       {
-         cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
+//         cout << "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = " << res << endl;
+		 printf("\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = %e\n" , res);
       }
    }
-//   x0->Distribute(x.GetBlock(x0_var));
+
+   x0->Distribute(x.GetBlock(x0_var));
+
   // 10.5: Compute Grad terms based on the solution x
   // Compute throught DPG formulation
   // (q,\tau) - (\grad u,\tau ) = 0
@@ -451,27 +445,6 @@ int main(int argc, char *argv[])
 		    HypreBoomerAMG *MQ = new HypreBoomerAMG(*AQ);
 			MQ->SetPrintLevel(0);
 
-			/* debug */
-//			HypreParMatrix * mat_grad_u = grad_u->ParallelAssemble(); //delete grad_u;
-//			HypreParVector debug_q1(q0_space);
-//			HypreParVector debug_q2(q0_space);
-//	   		mat_grad_u->Mult(*x0, debug_q1); 
-//			grad_u->TrueAddMult(*x0,debug_q2);
-//			HypreParVector com_q(q0_space);
-//			subtract( debug_q1,debug_q2, com_q);
-//			cout<<endl<<"rank "<<myid<<": "<<com_q.Norml2()<<endl;
-			
-			/* debug */
-//		    VectorFunctionCoefficient q_coeff(dim, q_exact);
-//			ParGridFunction q00(q0_space);
-//		    q00.ProjectCoefficient(q_coeff);
-//		    HypreParVector ex_q(q0_space);
-//			AQ->Mult( q00, ex_q);
-//			HypreParVector com_q(q0_space);
-//			subtract( ex_q,rhs_q, com_q);
-//			cout<<endl<<"rank "<<myid<<": "<<com_q.Norml2()<<endl;
-
-
 			CGSolver qcg(MPI_COMM_WORLD);
 			qcg.SetRelTol(1e-6);
 			qcg.SetMaxIter(200);
@@ -494,6 +467,7 @@ int main(int argc, char *argv[])
 
    cout << "\nelement number of the mesh: "<< mesh->GetNE ()<<endl; 
 
+   x0->Distribute( x.GetBlock(x0_var) );
    double x_error = x0->ComputeL2Error(u_coeff);
    ParGridFunction u_l2(x0_space);
    if(myid==0){
@@ -543,7 +517,7 @@ int main(int argc, char *argv[])
    }
 
    // 13. Free the used memory.
-   delete VecF;
+   delete trueF;
    delete S0inv;
    delete Shatinv;
    delete Shat;
@@ -594,7 +568,9 @@ double f_exact(const Vector & x){
 /* exact solution */
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
-		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+//		return  1.+sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+		return   sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+//		return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
 //		return  sin(M_PI*x(0) ) * sin( M_PI * x(1) ); /* first index is 0 */
 	}
 	else if(x.Size() == 1){

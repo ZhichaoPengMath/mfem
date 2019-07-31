@@ -68,7 +68,9 @@ int main(int argc, char *argv[])
    /* max number of allowable hanging nodes */
    int num_hanging_node_limit = 3;
 //   int num_hanging_node_limit = 2;
-    double ref_threshold = 0.25;
+   double max_ref_threshold = 0.25;
+   double global_ref_threshold = 0.125;
+   double abs_ref_threshold = 1e-5;
 
    const char *mesh_file = "../data/star.mesh";
    int order = 1;
@@ -81,7 +83,7 @@ int main(int argc, char *argv[])
 
    bool amr = true;
 
-   bool bool_triangle_nonconforming = true;
+   bool bool_triangle_nonconforming = false;
 
    OptionsParser args(argc, argv);
    args.AddOption(&mesh_file, "-m", "--mesh",
@@ -115,7 +117,13 @@ int main(int argc, char *argv[])
    args.AddOption(&amr_level, "-amr_level", "--amr_level",
                   "level of adaptive mesh refinement");
 
-   args.AddOption(&ref_threshold, "-amr_rel_tol", "--amr_rel_tol",
+   args.AddOption(&max_ref_threshold, "-amr_max_tol", "--amr_max_tol",
+                  "relative threshold for adaptive mesh refinement");
+
+   args.AddOption(&global_ref_threshold, "-amr_global_tol", "--amr_global_tol",
+                  "relative threshold for adaptive mesh refinement");
+
+   args.AddOption(&abs_ref_threshold, "-amr_abs_tol", "--amr_abs_tol",
                   "relative threshold for adaptive mesh refinement");
 
    args.AddOption(&num_hanging_node_limit, "-nc_limit", "--nc_limit",
@@ -145,7 +153,8 @@ int main(int argc, char *argv[])
    {
       ref_levels = (int)floor(log(50000./serial_mesh->GetNE())/log(2.)/dim);
    }
-   int serial_ref_levels = min(ref_levels, 5);
+   int serial_ref_levels = 0;
+//   int serial_ref_levels = min(ref_levels, 5);
    for (int l = 0; l < serial_ref_levels; l++)
    {
       serial_mesh->UniformRefinement();
@@ -265,6 +274,7 @@ int main(int argc, char *argv[])
    /* initialize Linear and Bilinear form */
    /* (f,v) linear form */
    ParLinearForm * F= new ParLinearForm(test_space);
+//   F->AddDomainIntegrator(new DomainLFIntegrator(one));
    F->AddDomainIntegrator(new DomainLFIntegrator(f_coeff));
 
    /* -(\grad u, \grad v) biliner  form */
@@ -294,7 +304,8 @@ int main(int argc, char *argv[])
    HypreParMatrix * matSinv=NULL;
    HypreParMatrix * matS0=NULL;
    HypreParVector * VecF=NULL;
-
+	
+   double global_error_estimator;
    for(int amr_iter = 0;amr_iter<amr_level+1 ;amr_iter++){
 	   /* update the right hand side */
        F->Assemble();
@@ -308,12 +319,12 @@ int main(int argc, char *argv[])
        ParGridFunction * x0 = new ParGridFunction(x0_space);
 //	   x0->SetFromTrueDofs(x.GetBlock(0));
        x0->MakeTRef(x0_space, x.GetBlock(x0_var) );
+	   *x0 = 0.;
 	   /* impose boundary condition */
-       x0->ProjectCoefficient(u_coeff);
+//       x0->ProjectCoefficient(u_coeff);
 
        ParGridFunction * xhat = new ParGridFunction(xhat_space);
 //	   xhat->SetFromTrueDofs(x.GetBlock(1));
-       xhat->MakeTRef(xhat_space, x.GetBlock(xhat_var) );
 
 
 
@@ -403,11 +414,25 @@ int main(int argc, char *argv[])
 	   /*******************************************************************************/
 	   // 13 output results on the current mesh
 	   // 13a error 
+	   x0->Distribute(x.GetBlock(x0_var) );
        double x_error = x0->ComputeL2Error(u_coeff);
        if(myid==0){
-           cout<< "\n dimension: "<<dim<<endl;
-           printf("\n|| u_h - u ||_{L^2} =%e\n\n",x_error );
+		   if(sol_opt == 0){
+			   cout<< "\n dimension: "<<dim<<endl;
+		       printf("\n|| u_h - u ||_{L^2} =%e\n\n",x_error );
+		   }
        }
+
+	    /* res = r^T G^-1 r*/
+        HypreParVector VEstimator(test_space), VResidual(test_space);
+        B->Mult(x,VResidual);
+        VResidual -= *VecF;
+        matSinv->Mult( VResidual,VEstimator );
+        global_error_estimator = sqrt( InnerProduct(VResidual, VEstimator) );
+        if (myid == 0)
+        {
+           printf( "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = %e\n", global_error_estimator);
+        }
 
        // 13b Save the refined mesh and the solution. This output can be viewed
        //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
@@ -431,6 +456,10 @@ int main(int argc, char *argv[])
           sol_sock << "parallel " << num_procs << " " << myid << "\n";
           sol_sock << "solution\n" << *mesh << * x0 << flush;
        }
+
+	   if(amr_iter==amr_level){
+			break;
+	   }
 /**    **********************************************************************************/
 	   // 14 . Adaptive mesh Refinement
        if(amr)
@@ -440,12 +469,6 @@ int main(int argc, char *argv[])
           B->Mult(x,VResidual);
           VResidual -= *VecF;
           matSinv->Mult( VResidual,VEstimator );
-		  /* res = r^T G^-1 r*/
-          double global_error_estimator = sqrt( InnerProduct(VResidual, VEstimator) );
-          if (myid == 0)
-          {
-             printf( "\n|| B0*x0 + Bhat*xhat - F ||_{S^-1} = %e\n", global_error_estimator);
-          }
 
 
 		  ParGridFunction GResidual(test_space);
@@ -470,9 +493,18 @@ int main(int argc, char *argv[])
 		  double max_local_error = 0.; /* max local error */
 		  MPI_Allreduce(&rank_max_local_error,&max_local_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
 
+		  double rank_sum_local_error_estimator = local_error_estimator.Norml1();
+		  double sum_error_estimator = 0.;
+		  MPI_Allreduce(&rank_sum_local_error_estimator,&sum_error_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
 		  for(int i=0; i <mesh->GetNE(); i++){
 		   if(  
-			    (local_error_estimator(i) > ref_threshold*max_local_error)
+			   (  (local_error_estimator(i) > abs_ref_threshold)	
+			&& (  (local_error_estimator(i) > max_ref_threshold*max_local_error)
+			    &&(local_error_estimator(i) > global_ref_threshold*sum_error_estimator/sqrt(mesh->GetNE() ) ) 
+//			    &&(local_error_estimator(i) > global_ref_threshold*global_error_estimator/sqrt(mesh->GetNE() ) ) 
+			   ) )
+//			  ||(local_error_estimator(i) > 1e-3)	
 			 ){
 				refine_color.Append(i);
 			}
@@ -631,10 +663,7 @@ double f_exact(const Vector & x){
 			return 8.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) );/* HDG */
 		}
 		else{
-			double yy = x(1) - 0.5;
-			return   2*alpha_pzc*alpha_pzc*alpha_pzc*yy/
-					(1+alpha_pzc*alpha_pzc*yy*yy )/
-					(1+alpha_pzc*alpha_pzc*yy*yy );
+			return 1.;
 		}
 	}
 	else if(x.Size() == 1){
@@ -654,10 +683,11 @@ double f_exact(const Vector & x){
 double u_exact(const Vector & x){
 	if(x.Size() == 2){
 		if(sol_opt == 0){
-			return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+			return  sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
+//			return  1. + x(0) + sin(2.*M_PI*x(0) ) * sin(2.* M_PI * x(1) ); /* HDG */
 		}
 		else{
-			return atan(alpha_pzc* (x(1) - 0.5) );
+			return 0.;
 		}
 	}
 	else if(x.Size() == 1){
@@ -678,8 +708,7 @@ void q_exact( const Vector & x, Vector & f){
 			f(1) =     + 2.*M_PI*sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) );/* HDG */
 		}
 		else{
-			f(0) = 0.;
-			f(1) = alpha_pzc/( 1. + alpha_pzc*alpha_pzc * (x(1)-0.5) * (x(1)-0.5) );
+			f = 0.;
 		}
 	}
 	else if(x.Size() == 1){
