@@ -211,7 +211,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	prec->SetDiagonalBlock(0,prec0);
 	prec->SetDiagonalBlock(1,prec1);
 	prec->SetDiagonalBlock(2,prec2);
-	if(perturb){
+	if( !(*perturb) ){
 		prec3 = new PetscLinearSolver( *matShat );
 			prec3->SetPrintLevel(0);
 			prec3->iterative_mode = true;

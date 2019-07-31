@@ -211,24 +211,26 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	prec->SetDiagonalBlock(0,prec0);
 	prec->SetDiagonalBlock(1,prec1);
 	prec->SetDiagonalBlock(2,prec2);
-	if(perturb){
+	if( !(*perturb) ){
 		prec3 = new PetscLinearSolver( *matShat );
-			prec3->SetPrintLevel(0);
-			prec3->iterative_mode = true;
+		prec3->SetPrintLevel(0);
+		prec3->iterative_mode = true;
 
-			KSP ksp_prec3(*prec3);
-			KSPSetType(ksp_prec3,KSPFCG);
-			KSPAppendOptionsPrefix(ksp_prec3,"s3_");
-			PC  pc_prec3;
-			KSPGetPC(ksp_prec3,&pc_prec3);
-			PCSetType(pc_prec3,PCHYPRE);
+		KSP ksp_prec3(*prec3);
+		KSPSetType(ksp_prec3,KSPFCG);
+		KSPAppendOptionsPrefix(ksp_prec3,"s3_");
+		PC  pc_prec3;
+		KSPGetPC(ksp_prec3,&pc_prec3);
+		PCSetType(pc_prec3,PCHYPRE);
 
-			prec->SetDiagonalBlock(3,prec3);
-		}
-		else{
-			mfem_prec3 = new HypreBoomerAMG( *matShat);
-			mfem_prec3->SetPrintLevel(0);
-		}
+		prec->SetDiagonalBlock(3,prec3);
+	}
+	else{
+		mfem_prec3 = new HypreBoomerAMG( *matShat);
+		mfem_prec3->SetPrintLevel(0);
+
+		prec->SetDiagonalBlock(3,mfem_prec3);
+	}
 
 
 		/* initialize linear solver */

@@ -1,5 +1,5 @@
 #include "mfem.hpp"
-#include "fixed_point_reduced_system_operator_amr.hpp"
+#include "amr_fixed_point_reduced_system_operator.hpp"
 //#include "RHSCoefficient.hpp"
 #include <fstream>
 #include <iostream>
@@ -623,7 +623,7 @@ int main(int argc, char *argv[])
 			Shat = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
 	   }
 	   else{
-		    amg_perturbation = min(1e-3, amg_perturbation);
+//		    amg_perturbation = min(1e-3, amg_perturbation);
 			cout<<amg_perturbation<<endl;
 			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
 	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
