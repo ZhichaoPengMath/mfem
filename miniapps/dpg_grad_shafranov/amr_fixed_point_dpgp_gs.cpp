@@ -179,18 +179,8 @@ int main(int argc, char *argv[])
    //    largest number that gives a final mesh with no more than 10,000
    //    elements.
    
-   // 3a. Serial Refinement
-   if (ref_levels < 0)
-   {
-      ref_levels = (int)floor(log(50000./serial_mesh->GetNE())/log(2.)/dim);
-   }
-   int serial_refine_levels = min(ref_levels, 5);
-   for (int l = 0; l < serial_refine_levels; l++)
-   {
-      serial_mesh->UniformRefinement();
-   }
-   // 3b. Coonstruct Parallel mesh and do the parallel refinement
-   int par_ref_levels = ref_levels - serial_refine_levels;
+   // 3a. Coonstruct Parallel mesh and do the parallel refinement
+   int par_ref_levels = ref_levels;
    ParMesh *mesh = new ParMesh(MPI_COMM_WORLD, *serial_mesh);
    delete serial_mesh;
    for(int l=0; l < par_ref_levels; l++){
