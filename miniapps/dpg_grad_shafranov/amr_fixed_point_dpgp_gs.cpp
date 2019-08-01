@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
    const char *petscrc_file = "";
 
    /* AMR parameters */
-   int amr_refine_level = 1;
+   int amr_refine_level = 0;
    bool amr_tri_nonconforming = false;
 
    OptionsParser args(argc, argv);
@@ -172,6 +172,8 @@ int main(int argc, char *argv[])
 		args.PrintOptions(cout);
    }
 
+   amr_refine_level = max(amr_refine_level,0); /* avoid negative amr_refine_level */
+   
 
    // 1b. We initialize PETSc
    if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
@@ -536,9 +538,8 @@ int main(int argc, char *argv[])
       		Sjump->SpMat() *= amg_perturbation;
       		Sjump->SpMat() += B_u_normal_jump->SpMat();
       		matSjump=Sjump->ParallelAssemble(); 
-   		delete Sjump;
-   		delete B_u_normal_jump;
-           Shat = RAP(matSjump, matVinv, matSjump);
+            Shat = RAP(matSjump, matVinv, matSjump);
+		    delete Sjump;
       }
       /********************************************************/
 	  /***********************************************************
@@ -549,14 +550,14 @@ int main(int argc, char *argv[])
 	  *    B = mass_q     -u_dot_div 0        u_normal_jump
 	  *        q_weak_div  0         q_jump   0
 	  ********************************************************/
-	  BlockOperator B(offsets_test, offsets);
+	  BlockOperator *B = new BlockOperator (offsets_test, offsets);
 	  
-	  B.SetBlock(0, q0_var  ,matB_mass_q);
-	  B.SetBlock(0, u0_var  ,matB_u_dot_div);
-	  B.SetBlock(0, uhat_var,matB_u_normal_jump);
+	  B->SetBlock(0, q0_var  ,matB_mass_q);
+	  B->SetBlock(0, u0_var  ,matB_u_dot_div);
+	  B->SetBlock(0, uhat_var,matB_u_normal_jump);
 	  
-	  B.SetBlock(1, q0_var   ,matB_q_weak_div);
-	  B.SetBlock(1, qhat_var ,matB_q_jump);
+	  B->SetBlock(1, q0_var   ,matB_q_weak_div);
+	  B->SetBlock(1, qhat_var ,matB_q_jump);
 	
 	
 	  /*********************************************
@@ -568,19 +569,19 @@ int main(int argc, char *argv[])
 	   * df/du = 0, and df/du block will be updated
 	   * during the nonlinear solve step
 	   * *******************************************/
-	  BlockOperator Jac(offsets_test,offsets);
+	  BlockOperator * Jac = new BlockOperator(offsets_test,offsets);
 	  
-	  Jac.SetBlock(0, q0_var  ,matB_mass_q);
-	  Jac.SetBlock(0, u0_var  ,matB_u_dot_div);
-	  Jac.SetBlock(0, uhat_var,matB_u_normal_jump);
+	  Jac->SetBlock(0, q0_var  ,matB_mass_q);
+	  Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
+	  Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
 	  
-	  Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
-	  Jac.SetBlock(1, qhat_var ,matB_q_jump);
+	  Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
+	  Jac->SetBlock(1, qhat_var ,matB_q_jump);
 	  
 	  
-	  BlockOperator InverseGram(offsets_test, offsets_test);
-	  InverseGram.SetBlock(0,0,matVinv);
-	  InverseGram.SetBlock(1,1,matSinv);
+	  BlockOperator * InverseGram = new BlockOperator(offsets_test, offsets_test);
+	  InverseGram->SetBlock(0,0,matVinv);
+	  InverseGram->SetBlock(1,1,matSinv);
 
 	  /*******************************************************************************
 	   * 11. pass all the pointer to the infomration interfce,
@@ -607,15 +608,17 @@ int main(int argc, char *argv[])
 											/* block sizes */
 	   										offsets, offsets_test,
 											/* block operators */
-	   										&B,
-	   										&Jac,
-	   										&InverseGram,
+	   										B,
+	   										Jac,
+	   										InverseGram,
 											/* boundary conditions */
 	   										ess_trace_vdof_list,
 	   										&b
 	  );
+		  cout<<reduced_system_operator->Width()<<endl;
 	
-      for(int amr_iter = 0; amr_iter<1 ; amr_iter++){
+//      for(int amr_iter = 0; true ; amr_iter++){
+      for(int amr_iter = 0; amr_iter<=amr_refine_level ; amr_iter++){
        	// 12. Solve the normal equation system using the PCG iterative solver.
        	//     Check the weighted norm of residual for the DPG least square problem.
        	//     Wrap the primal variable in a GridFunction for visualization purposes.
@@ -656,7 +659,7 @@ int main(int argc, char *argv[])
        		  linear_source_operator->ParallelAssemble( F_rec.GetBlock(1) );
        
        	      BlockVector LSres( offsets_test ), tmp( offsets_test );
-       	      B.Mult(x, LSres);
+       	      B->Mult(x, LSres);
        
        		  /* Bx - linear source */
        	      LSres -= F_rec;
@@ -678,7 +681,7 @@ int main(int argc, char *argv[])
        		  LSres -= F_rec;
        
        		  /* calculate the dual norm */
-       	      InverseGram.Mult(LSres, tmp);
+       	      InverseGram->Mult(LSres, tmp);
        		  double res = sqrt(InnerProduct(LSres,tmp) );
        		  if(myid == 0){
        			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
@@ -776,8 +779,9 @@ int main(int argc, char *argv[])
           // 15. Obtain the error estimator and refine the mesh
 		  // 15a. Error estimator
 		  // 15b. Refine the mesh
-		  if(amr_iter>amr_refine_level){
-			  break; /* stop the AMR iteration */
+		  if(amr_iter>=amr_refine_level){
+//			  break; /* stop the AMR iteration */
+			  mesh->UniformRefinement();
 		  }
 		  else{
 				mesh->UniformRefinement();
@@ -789,6 +793,33 @@ int main(int argc, char *argv[])
 		  // 16. Update the finite element spaces, linear, bilinear forms
 		  // and matrices,
 		  // update is defined in FixedPointReducedSystemOperator
+
+		  /* 16a. update the finite element space */
+		  cout<<"Before: rank "<<myid<<endl
+			  <<"0 "<<offsets[0]<<endl
+			  <<"1 "<<offsets[1]<<endl
+			  <<"2 "<<offsets[2]<<endl
+			  <<"3 "<<offsets[3]<<endl
+			  <<endl;
+
+		  reduced_system_operator->UpdateFEMSpace();
+		  cout<<reduced_system_operator->Width()<<endl<<endl;
+		  cout<<"After: rank"<<myid<<endl
+			  <<"0 "<<offsets[0]<<endl
+			  <<"1 "<<offsets[1]<<endl
+			  <<"2 "<<offsets[2]<<endl
+			  <<"3 "<<offsets[3]<<endl
+			  <<endl;
+		  /* 16b. update the block vectors, grid functions and deal with boundary condition */
+//		  uhat.SetFromTrueDofs(x.GetBlock(uhat_var) );
+		  x.Update(offsets);
+		  x = 0.;
+		  uhat.Update();
+		  uhat.ProjectCoefficientSkeletonDG(u_coeff); /* deal with boundary conditions */
+		  /* 16c. update the reduced_system_operator */
+		  reduced_system_operator->UpdateOperators(uhat);
+		  /* 16d. update the linear solver in the reduced_system_operator */
+		  reduced_system_operator->UpdateSolver();
 
        } /* end of AMR loop */
 
@@ -803,9 +834,7 @@ int main(int argc, char *argv[])
    delete B_u_dot_div;
    delete B_q_weak_div;
    delete B_q_jump;
-   if(prec_amg != 1){	
-	   delete B_u_normal_jump;
-   }
+   delete B_u_normal_jump;
    /* matrix */
    delete matB_mass_q;
    delete matB_u_dot_div;

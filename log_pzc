@@ -1,8 +1,13 @@
-2019/05/30
-(1) Add dpg_integrators.cpp and dpg_integrators.hpp to the fem
-(2) modify fem.hpp to include dpg_integrators
-(3) Add practice examples:
-	ex1_pzc.cpp ex14_pzc.cpp  ex8_pzc.cpp
+2019/08/01
+HypreParMatrix *mat = RAP(R,A,P) pass to PETSC KSP solver not good, because they
+may cause Petsc assemble a matrix, and PETSC calls allocate for this action, this
+may ruin the scalbility and make the code very slow
+The reason is that RAP does not assemble a real matrix, but KSP solver needs one,
+since HypreParMatrix is passed
+
+Solution to this problem:
+check ex5p in petsc examples and use ParMult instead, in this way, we really assemble
+a matrix
 
 2019/07/29
 (1) Difference between 
@@ -15,3 +20,8 @@ What we should do, it is to update the vector size and mannually refine it.
 
 (3) L2_Interface, RT_Trace, H1_Trace may only support Update(false)
 
+2019/05/30
+(1) Add dpg_integrators.cpp and dpg_integrators.hpp to the fem
+(2) modify fem.hpp to include dpg_integrators
+(3) Add practice examples:
+	ex1_pzc.cpp ex14_pzc.cpp  ex8_pzc.cpp

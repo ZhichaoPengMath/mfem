@@ -48,6 +48,10 @@ private:
 	 *  stest_space: scalar L2 test space
 	 *****************************************/
 	ParFiniteElementSpace * vtest_space, * stest_space;
+	/*********************************
+	 * linear operator for the right hand side
+	 *********************************/
+    ParLinearForm * linear_source_operator;	
 	/*************************************
 	 *  Bilinear Forms
 	 * ***********************************/
@@ -56,13 +60,13 @@ private:
 	/*************************************
 	 * Pointer to parallel matrix
 	 * ***********************************/
-    HypreParMatrix * matB_mass_q; 
-    HypreParMatrix * matB_u_dot_div;
-    HypreParMatrix * matB_u_normal_jump;
-    HypreParMatrix * matB_q_weak_div;
-    HypreParMatrix * matB_q_jump;
-	HypreParMatrix * matVinv;
-	HypreParMatrix * matSinv;
+    mutable HypreParMatrix * matB_mass_q; 
+    mutable HypreParMatrix * matB_u_dot_div;
+    mutable HypreParMatrix * matB_u_normal_jump;
+    mutable HypreParMatrix * matB_q_weak_div;
+    mutable HypreParMatrix * matB_q_jump;
+	mutable HypreParMatrix * matVinv;
+	mutable HypreParMatrix * matSinv;
 	/***********************************************************
 	 * pointer to parallel matrix corresponding to the preconditioner
 	 * *********************************************************/
@@ -73,8 +77,8 @@ private:
 	/******************************
 	 * block structures
 	 * ****************************/
-	Array<int> offsets;
-	Array<int> offsets_test;
+	Array<int> &offsets;
+	Array<int> &offsets_test;
 	/***********************************************************
 	 * pointer to parallel matrix corresponding to the preconditioner
 	 * *********************************************************/
@@ -84,39 +88,34 @@ private:
 	 *	Equation to solve
 	 *		Jac^T * Ginv B ( x - f(x) ) = 0
 	 * *****************************/
-	BlockOperator * B;
-	BlockOperator * Ginv;
+	mutable BlockOperator * B;
+	mutable BlockOperator * Ginv;
 	Vector *b;
-	Vector &F;
+	BlockVector &F;
 
-//	FGMRESSolver * solver;
 	PetscLinearSolver * solver;
 
-	BlockDiagonalPreconditioner * prec;
-	HypreBoomerAMG * prec0;
-	HypreBoomerAMG * prec1;
-	Solver * prec2;
-	PetscLinearSolver * prec3;
-	HypreBoomerAMG * mfem_prec3;
+	mutable BlockDiagonalPreconditioner * prec;
+	mutable HypreBoomerAMG * prec0;
+	mutable HypreBoomerAMG * prec1;
+	mutable Solver * prec2;
+	mutable PetscLinearSolver * prec3;
+	mutable HypreBoomerAMG * mfem_prec3;
 
 	/* operator calculate J^T G^-1 Bx */
 	mutable Operator * JTGinvB;
 	mutable HypreParMatrix * NDfDu;
 	mutable BlockOperator * Jac;
-	/*********************************
-	 * linear operator for the right hand side
-	 *********************************/
-    ParLinearForm * linear_source_operator;	
 
 	/*******************************
 	 * essential vdof for boundary condition
 	 * *****************************/
-   const Array<int>& ess_trace_vdof_list;
+   Array<int>& ess_trace_vdof_list;
 		
 
 	/***************************/
 	mutable BlockOperator * Jacobian;
-    mutable Vector fu;	
+	mutable Vector fu;	
 
 public:
 	FixedPointReducedSystemOperator(
@@ -128,7 +127,7 @@ public:
 			/* linear forms */
 			ParLinearForm * _linear_source_operator,
 			/* vector corresponding to lienar form */
-			Vector &_F,
+			BlockVector &_F,
 			/* Bilinear Form */
 			ParMixedBilinearForm *_B_mass_q, ParMixedBilinearForm *_B_u_dot_div, ParMixedBilinearForm *_B_u_normal_jump,
 		    ParMixedBilinearForm *_B_q_weak_div, ParMixedBilinearForm * _B_q_jump,
@@ -138,13 +137,13 @@ public:
 			HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 			/* block structure */
-			Array<int> _offsets, Array<int> _offsets_test,
+			Array<int> &_offsets, Array<int> &_offsets_test,
 			/* block operators */
 			BlockOperator* _B,
 			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
 			/* boundary conditions */
-			const Array<int> &_ess_trace_vdof_list,
+			Array<int> &_ess_trace_vdof_list,
 			Vector *_b
 			/* preconditioner */
 //		    BlockDiagonalPreconditioner * _P,
@@ -157,6 +156,11 @@ public:
 
 	// Define FF(x) = 0 
 	virtual void Mult( const Vector &x, Vector &y) const;  
+
+	// Update for AMR
+	virtual void UpdateFEMSpace();
+	virtual void UpdateOperators(ParGridFunction & uhat);
+	virtual void UpdateSolver();
 
 	virtual ~FixedPointReducedSystemOperator();
 
@@ -174,7 +178,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	/* lienar form */
 	ParLinearForm * _linear_source_operator,
 	/* vector corresponding to linear form */
-	Vector &_F,
+	BlockVector &_F,
 	/* bilinear forms */
 	ParMixedBilinearForm *_B_mass_q, ParMixedBilinearForm *_B_u_dot_div, ParMixedBilinearForm *_B_u_normal_jump,
 	ParMixedBilinearForm *_B_q_weak_div, ParMixedBilinearForm * _B_q_jump,
@@ -184,13 +188,13 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 	/* block structures */
-	Array<int> _offsets, Array<int> _offsets_test,
+	Array<int> &_offsets, Array<int> &_offsets_test,
 	/* block operators */
 	BlockOperator* _B,
 	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
 	/* boundary conditons */
-	const Array<int> &_ess_trace_vdof_list,
+	Array<int> &_ess_trace_vdof_list,
 	Vector *_b
 //	BlockDiagonalPreconditioner * _P,
 	):
@@ -387,3 +391,134 @@ FixedPointReducedSystemOperator::~FixedPointReducedSystemOperator(){
 	delete Jacobian;
 }
 
+/*******************************************************************************
+ *  AMR update for the reduced system operator
+ ******************************************************************************/
+void FixedPointReducedSystemOperator::UpdateFEMSpace(){
+	/*************************************
+	* 1 update the finite element spaces 
+	* ************************************/
+	q0_space->Update();
+	u0_space->Update();
+	qhat_space->Update(false);
+	uhat_space->Update(false);
+
+	vtest_space->Update();
+	stest_space->Update();
+
+	/*************************************
+	* 2 update the block structure 
+	* ************************************/
+	offsets[0] = 0;
+	offsets[1] = q0_space->TrueVSize();
+	offsets[2] = offsets[1] + u0_space->TrueVSize();
+	offsets[3] = offsets[2] + qhat_space->TrueVSize();
+	offsets[4] = offsets[3] + uhat_space->TrueVSize();
+
+	offsets_test[0] = 0;
+	offsets_test[1] = vtest_space->TrueVSize();
+	offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+	/***********************************************
+	* 3 update the size of ReducedSystemOperator 
+	* *********************************************/
+	width =  offsets[4];
+	height = width;
+}
+
+void FixedPointReducedSystemOperator::UpdateOperators(ParGridFunction &uhat){
+	/* identify the location of blocks */
+    enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
+	/*************************************
+	* 1 update the linear form
+	* ************************************/
+	linear_source_operator->Update();
+	linear_source_operator->Assemble();
+
+	cout<<"linear form updated"<<endl;
+	/*************************************
+	* 2 update the block vector 
+	* ************************************/
+	F.Update(offsets_test);
+
+
+	/*************************************
+	* 3 update the bilinear form
+	* ************************************/
+	B_mass_q->Update();
+	B_mass_q->Assemble();
+	B_mass_q->Finalize();
+
+	B_u_dot_div->Update();
+	B_u_dot_div->Assemble();
+	B_u_dot_div->Finalize();
+
+	B_u_normal_jump->Update();
+	B_u_normal_jump->Assemble();
+    B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
+	B_u_normal_jump->Finalize();
+
+	B_q_weak_div->Update();
+	B_q_weak_div->Assemble();
+	B_q_weak_div->Finalize();
+
+	B_q_jump->Update();
+	B_q_jump->Assemble();
+	B_q_jump->Finalize();
+	
+	Vinv->Update();
+	Vinv->Assemble();
+	Vinv->Finalize();
+
+	Sinv->Update();
+	Sinv->Assemble();
+	Sinv->Finalize();
+	cout<<"bilinear form updated"<<endl;
+
+	/*********************************
+	 * 4 update the matrices
+	 * *******************************/
+    matB_mass_q = B_mass_q->ParallelAssemble();
+    matB_u_dot_div = B_u_dot_div->ParallelAssemble();
+    matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
+    matB_q_weak_div = B_q_weak_div->ParallelAssemble();
+    matB_q_jump = B_q_jump->ParallelAssemble();
+
+    matVinv = Vinv->ParallelAssemble();
+    matSinv = Sinv->ParallelAssemble();
+	/****************************************
+	 * 5 update the block operators
+	 * **************************************/
+	/* update B */
+	delete B;
+	B = new BlockOperator(offsets_test,offsets);
+
+	B->SetBlock(0, q0_var  ,matB_mass_q);
+	B->SetBlock(0, u0_var  ,matB_u_dot_div);
+	B->SetBlock(0, uhat_var,matB_u_normal_jump);
+	
+	B->SetBlock(1, q0_var   ,matB_q_weak_div);
+	B->SetBlock(1, qhat_var ,matB_q_jump);
+
+    /* update Jac */
+	delete Jac;
+
+	Jac = new BlockOperator(offsets_test,offsets);
+	
+	Jac->SetBlock(0, q0_var  ,matB_mass_q);
+	Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
+	Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
+	
+	Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
+	Jac->SetBlock(1, qhat_var ,matB_q_jump);
+
+	/* update Ginv */
+	delete Ginv;
+	Ginv = new BlockOperator(offsets_test,offsets_test);
+
+	Ginv->SetBlock(0,0,matVinv);
+	Ginv->SetBlock(1,1,matSinv); 
+	cout<<"block operator updated"<<endl;
+}
+
+void FixedPointReducedSystemOperator:: UpdateSolver(){
+}
