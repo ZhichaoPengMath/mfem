@@ -309,31 +309,18 @@ int main(int argc, char *argv[])
 
 
    ParGridFunction u0(u0_space);
-//   u0.MakeTRef(u0_space, x.GetBlock(u0_var), 0); /* Question should I use TRef or Ref here ? */
-//   u0.ProjectCoefficient(u_coeff);
-//
-//   x.GetBlock(u0_var) = u0;
-//   Vector diff(u0.Size() );
-//   subtract(u0, x.GetBlock(u0_var), diff);
-//   cout<<diff.Norml2()<<endl;
-
 
    ParGridFunction q0(q0_space);
-//   q0.MakeTRef(q0_space, x.GetBlock(q0_var), 0); /* Question should I use TRef or Ref here ? */
-//   q0.ProjectCoefficient(q_coeff);
-//   x.GetBlock(q0_var) = q0;
 
    ParGridFunction uhat;
-   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0); /* Question should I use TRef or Ref here ? */
+   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
    uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
 
    /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
    FunctionCoefficient f_coeff( linear_source );/* coefficients */
    ParLinearForm * linear_source_operator(new ParLinearForm(stest_space) );
-//   linear_source_operator->Update(stest_space, F.GetBlock(1) ,0);
    linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
-//   linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
    linear_source_operator->Assemble();
 
 
@@ -391,7 +378,6 @@ int main(int argc, char *argv[])
    B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
    B_u_normal_jump->Assemble();
    B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
-//   B_u_normal_jump->EliminateTrialDofs(ess_bdr, x.GetBlock(uhat_var), F);
    B_u_normal_jump->Finalize();
    F_rec = F; /* deal with boundary condition here, so that when calculating dual norm things will be correct */
 
@@ -496,22 +482,6 @@ int main(int argc, char *argv[])
    //        q_weak_div  0         q_jump   0
    /********************************************************/
    //8. Calculate blocks myself
-	/* off diagonal block */
-    HypreParMatrix *matAL01 = RAP(matB_mass_q,matVinv, matB_u_dot_div);
-    HypreParMatrix *matAL02 = RAP(matB_q_weak_div, matSinv, matB_q_jump);
-    HypreParMatrix *matAL03 = RAP(matB_mass_q,matVinv, matB_u_normal_jump);
-     
-    HypreParMatrix *matAL13 = RAP(matB_u_dot_div, matVinv, matB_u_normal_jump);
-   /* diagonal block */
-	HypreParMatrix * matAL00  = RAP(matB_mass_q, matVinv, matB_mass_q);
-	matAL00->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
-	
-	HypreParMatrix * matAL11 = RAP( matVinv, matB_u_dot_div);
-	
-	HypreParMatrix * matAL22 = RAP( matSinv, matB_q_jump);
-
-	HypreParMatrix * matAL33 = RAP( matVinv, matB_u_normal_jump);
-
 	BlockOperator B(offsets_test, offsets);
 
 	B.SetBlock(0, q0_var  ,matB_mass_q);
@@ -545,33 +515,6 @@ int main(int argc, char *argv[])
 	InverseGram.SetBlock(0,0,matVinv);
 	InverseGram.SetBlock(1,1,matSinv);
 	
-	/***************************************************
-	 * allocate memory to store A = Jac^T G^-1 Jac,
-	 * A = AL + AN, 
-	 * where AL = B^T G^-1 B is the linear part and
-	 * AN is the nonlinear part depneding on df/du.
-	 * Here, initially, we assemble the small blocks for 
-	 * AL and store them. The nonlinear part AN will be 
-	 * updated during the nonlinear solve step.
-	 * *************************************************/
-	BlockOperator *A = new BlockOperator(offsets,offsets);
-	/* diagonal */
-	A->SetBlock(0,0,matAL00);
-	A->SetBlock(1,1,matAL11);
-	A->SetBlock(2,2,matAL22);
-	A->SetBlock(3,3,matAL33);
-
-	/* offdiagonal */
-	A->SetBlock(0,1,matAL01);
-	A->SetBlock(1,0,matAL01->Transpose() );
-	A->SetBlock(0,2,matAL02);
-	A->SetBlock(2,0,matAL02->Transpose() );
-	A->SetBlock(0,3,matAL03);
-	A->SetBlock(3,0,matAL03->Transpose() );
-
-	A->SetBlock(1,3,matAL13);
-	A->SetBlock(3,1,matAL13->Transpose() );
-
 	// 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
 	//   We use the "Jacobian" preconditionner
 	//
@@ -681,7 +624,8 @@ int main(int argc, char *argv[])
 
 			petsc_newton->iterative_mode = true;
 
-			SNES pn_snes(*petsc_newton);
+			SNES pn_snes = SNES(*petsc_newton);
+//			SNES pn_snes(*petsc_newton);
 
 			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
 			Vector bb;
@@ -826,8 +770,6 @@ int main(int argc, char *argv[])
 //   // 13. Free the used memory.
 	/* reduced system operator */
    delete reduced_system_operator;
-   /* BlockOperators */
-   delete A;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
@@ -866,120 +808,6 @@ int main(int argc, char *argv[])
 
    return 0;
 } /* end of main */
-
-
-/* define the source term on the right hand side */
-/* exact solution */
-//double u_exact(const Vector & x){
-//	if(x.Size() == 2){
-//		double xi(x(0) );
-//		double yi(x(1) );
-//
-//		if(sol_opt == 0){
-//			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
-//		}
-//		else if(sol_opt == 1){
-//			double d1 =  0.075385029660066;
-//			double d2 = -0.206294962187880;
-//			double d3 = -0.031433707280533;
-//
-//			return   1./8.* pow(x(0),4)
-//				   + d1
-//				   + d2 * x(0)*x(0)
-//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-//		}
-//		else if(sol_opt == 2){
-//			double d1 =  0.015379895031306;
-//    		double d2 = -0.322620578214426;
-//    		double d3 = -0.024707604384971;
-//
-//			return   1./8.* pow(x(0),4)
-//				   + d1
-//				   + d2 * x(0)*x(0)
-//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-//		}
-//		else{
-//			return 0;
-//		}	
-//	}
-//	else{
-//		return 0;
-//	}
-//
-//}
-
-// The right hand side
-//double f_exact(const Vector & x){
-//	if(x.Size() == 2){
-//		 double xi(x(0) );
-//		 double yi(x(1) );
-//
-//		 if(sol_opt == 0){
-//			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-//				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-//					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-//				    -u_exact(x) + 0.01*exp( -u_exact(x) );
-//					-u_exact(x);
-//		 }
-//		 else if( (sol_opt == 1) || (sol_opt == 2) ){
-//			 // r^2/r
-//			return -x(0) 
-//				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
-////				   +0.5*exp( -u_exact(x) );
-////				   -u_exact(x) + exp( -u_exact(x) );
-//				   -u_exact(x);
-////				   +exp( -u_exact(x) );
-//		 }
-//		 else{
-//			return 0;
-//		 }
-//	}
-//	else{
-//		return 0;
-//	}
-//
-//}
-//
-//
-///* exact q = - 1/r grad u */
-//void q_exact(const Vector & x,Vector & q){
-//	if(x.Size() == 2){
-//		 double xi(x(0) );
-//		 double yi(x(1) );
-//
-//		 if(sol_opt == 0){
-//			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
-//		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
-//		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
-//		 }
-//		 else if(sol_opt ==1){
-//			double d1 =  0.075385029660066;
-//			double d2 = -0.206294962187880;
-//			double d3 = -0.031433707280533;
-//
-//			q(0) = -1./2. * pow( x(0),2 )
-//				   -d2*2.
-//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-//			q(1) = -d3*( -8.* x(0) * x(1) );
-//		 }
-//		 else if(sol_opt ==2){
-//			double d1 =  0.015379895031306;
-//    		double d2 = -0.322620578214426;
-//    		double d3 = -0.024707604384971;
-//
-//			q(0) = -1./2. * pow( x(0),2 )
-//				   -d2*2.
-//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-//			q(1) = -d3*( -8.* x(0) * x(1) );
-//		 }
-//		 else{
-//			q = 0.;
-//		 }
-//	}
-//	else{
-//		q  = 0.;
-//	}
-//}
 
 
 /* vector 0 */

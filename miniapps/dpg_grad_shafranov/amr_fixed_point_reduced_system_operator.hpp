@@ -216,7 +216,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 		prec3->SetPrintLevel(0);
 		prec3->iterative_mode = true;
 
-		KSP ksp_prec3(*prec3);
+		KSP ksp_prec3 = KSP(*prec3);
 		KSPSetType(ksp_prec3,KSPFCG);
 		KSPAppendOptionsPrefix(ksp_prec3,"s3_");
 		PC  pc_prec3;
