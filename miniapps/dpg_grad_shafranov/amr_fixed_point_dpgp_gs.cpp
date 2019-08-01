@@ -4,6 +4,8 @@
 #include <fstream>
 #include <iostream>
 
+
+
 using namespace std;
 using namespace mfem;
 
@@ -48,11 +50,14 @@ int main(int argc, char *argv[])
    bool perturb = false;
 
    bool use_petsc = true;
-   bool use_factory = true;
 
    bool vhat_amg = false;
 
    const char *petscrc_file = "";
+
+   /* AMR parameters */
+   int amr_refine_level = 1;
+   bool amr_tri_nonconforming = false;
 
    OptionsParser args(argc, argv);
 
@@ -72,10 +77,6 @@ int main(int argc, char *argv[])
    args.AddOption(&q_vis_error, "-q_vis_error", "--q_vis_fd", "-no_q_vis_error",
                   "--no_q_vis_error",
                   "visualize error of q or not, by default not visualize it");
-
-   args.AddOption(&use_factory, "-no_fd", "--no_fd", "-fd",
-                  "--fd",
-                  "Enable fd or not");
 
    args.AddOption(&vhat_amg, "-vhat_amg", "--vhat_amg", "-no_vhat_amg",
                   "--no_vhat_amg",
@@ -126,8 +127,7 @@ int main(int argc, char *argv[])
 
    args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
 				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
-
-
+   
    args.Parse();
    if(sol_opt == 1){
 		mesh_file = "../../data/cerfon_iter_quad.mesh";
@@ -149,6 +149,14 @@ int main(int argc, char *argv[])
    }
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
+   /* AMR options */
+   args.AddOption(&amr_refine_level, "-amr_level", "--amr_level",
+                  "how many AMR refinement level");
+
+   args.AddOption(&amr_tri_nonconforming, "-tri_non", "--tri_non", "-tri_conf",
+                  "--tri_conf",
+                  "Conforming or non-conforming AConforming or non-conforming AMR for triangle meshh");
+
    args.Parse();
 
 
@@ -173,6 +181,9 @@ int main(int argc, char *argv[])
    //    the same code.
    Mesh *serial_mesh = new Mesh(mesh_file, 1, 1);
    int dim = serial_mesh->Dimension();
+
+   /* this line is important */
+   serial_mesh->EnsureNCMesh( amr_tri_nonconforming );
 
    // 3. Refine the mesh to increase the resolution. In this example we do
    //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
@@ -412,13 +423,6 @@ int main(int argc, char *argv[])
    HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
    HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
 
-   delete B_mass_q;
-   delete B_u_dot_div;
-   delete B_q_weak_div;
-   delete B_q_jump;
-   if(prec_amg != 1){	
-	   delete B_u_normal_jump;
-   }
 
    MPI_Barrier(MPI_COMM_WORLD);
    /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
@@ -472,307 +476,336 @@ int main(int argc, char *argv[])
    HypreParMatrix *matVinv = Vinv->ParallelAssemble();
    HypreParMatrix *matSinv = Sinv->ParallelAssemble();
 
-
-	/************************************************/
-   // 8. Set up the 1x2 block Least Squares DPG operator, 
-   //    the normal equation operator, A = B^t InverseGram B, and
-   //    the normal equation right-hand-size, b = B^t InverseGram F.
+   // 8. Set up a block-diagonal preconditioner for the 4x4 normal equation
+   //   We use the "Jacobian" preconditionner
    //
-   //    B = mass_q     -u_dot_div 0        u_normal_jump
-   //        q_weak_div  0         q_jump   0
-   /********************************************************/
-   //8. Calculate blocks myself
-	BlockOperator B(offsets_test, offsets);
-
-	B.SetBlock(0, q0_var  ,matB_mass_q);
-	B.SetBlock(0, u0_var  ,matB_u_dot_div);
-	B.SetBlock(0, uhat_var,matB_u_normal_jump);
-	
-	B.SetBlock(1, q0_var   ,matB_q_weak_div);
-	B.SetBlock(1, qhat_var ,matB_q_jump);
-
-
-	/*********************************************
-	 * allocate memory to store 
-	 * Jac =  mass_q	 -u_dot_div  0		u_normal_jump
-	 *        q_weak_div -df/du      q_jump 0
-	 *	   = B - DF/DU
-	 * Now, we only allocate memory and set 
-	 * df/du = 0, and df/du block will be updated
-	 * during the nonlinear solve step
-	 * *******************************************/
-	BlockOperator Jac(offsets_test,offsets);
-
-	Jac.SetBlock(0, q0_var  ,matB_mass_q);
-	Jac.SetBlock(0, u0_var  ,matB_u_dot_div);
-	Jac.SetBlock(0, uhat_var,matB_u_normal_jump);
-	
-	Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
-	Jac.SetBlock(1, qhat_var ,matB_q_jump);
-
-	
-	BlockOperator InverseGram(offsets_test, offsets_test);
-	InverseGram.SetBlock(0,0,matVinv);
-	InverseGram.SetBlock(1,1,matSinv);
-	
-	// 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
-	//   We use the "Jacobian" preconditionner
-	//
-	//   V0
-	//			S0 
-	//					Vhat
-	//							Shat
-	//    corresponding to the primal (x0) and interfacial (xhat) unknowns.
-	//
-	//  Actually, the exact blocks are
-	//		V0 = B_q_weak_div^T S^-1 B_q_weak_div
-	//		    +Mass_q^T  V^-1  Mass_q
-	//
-	//		S0 = u_dot_div^T  S^-1  u_dot_div
-	//
-	//       Vhat = q_jump^T S^-1 q_jump.
-	//  
-	//       Shat = u_normal_jump^T V^-1 u_normal_jump
-	//
-	//       One interesting fact:
-	//			V0 \approx Mass
-	//			S0 \approx Mass
-	//
-	// We want to approximate them.
-	/***************************************************************/
-	   ParBilinearForm *S0 = new ParBilinearForm(u0_space);
-	   S0->AddDomainIntegrator(new MassIntegrator() );
-	   S0->Assemble();
-	   S0->Finalize();
-	   HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
-	
-		// the exact form of the diagonal block //
-	   HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
-	   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
-	
-	   HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
-
-	   /********************************************************/
-	   /* perturbed amg preconditioner for the last block */
-	   ParMixedBilinearForm *Sjump = NULL;
-	   HypreParMatrix * matSjump = NULL;
-	   HypreParMatrix * Shat = NULL;
-
-	   /* By default use petsc to define the AMG preconditioner for the
-		* third block Shat, and no need to perturb Shat.
-		* However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
-		* to make it work */
-	   if(!perturb){
-			Shat = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
-	   }
-	   else{
-//		    amg_perturbation = min(1e-3, amg_perturbation);
-			cout<<amg_perturbation<<endl;
-			Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
-	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
-	   		Sjump->Assemble();
-	   		Sjump->Finalize();
-	   		Sjump->SpMat() *= amg_perturbation;
-	   		Sjump->SpMat() += B_u_normal_jump->SpMat();
-	   		matSjump=Sjump->ParallelAssemble(); 
-			delete Sjump;
-			delete B_u_normal_jump;
-	        Shat = RAP(matSjump, matVinv, matSjump);
-	   }
-	   /********************************************************/
-
-	   /*******************************************************************************
-		* 9b pass all the pointer to the infomration interfce,
-		* everything is passed to PETSC by FixedPointReducedSystemOperator,
-		* Jac and A is updated throught the FixedPointReducedSystemOperator
-		* ******************************************************************************/
-	   FixedPointReducedSystemOperator * reduced_system_operator = new FixedPointReducedSystemOperator(
-												&use_petsc,
-												&perturb,
-												u0_space, q0_space, uhat_space, qhat_space,
-												vtest_space, stest_space,
-												matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
-												matB_q_jump, matVinv, matSinv,
-												matV0, AmatS0, Vhat, Shat, 
-												offsets, offsets_test,
-												&B,
-												&Jac,
-												&InverseGram,
-												ess_trace_vdof_list,
-												&b,
-												F,
-												linear_source_operator
-			   );
-
-	// 10. Solve the normal equation system using the PCG iterative solver.
-	//     Check the weighted norm of residual for the DPG least square problem.
-	//     Wrap the primal variable in a GridFunction for visualization purposes.
-
-	   StopWatch timer;
-	   if(!use_petsc){
-		   if(myid == 0){
-				cout<<"Wrong! PETSC is not used!"<<endl<<endl;
-		   }
-	   }
-	   else{
-		    PetscNonlinearSolver * petsc_newton = new PetscNonlinearSolver( MPI_COMM_WORLD );
-		    petsc_newton->SetOperator( *reduced_system_operator );
-		    petsc_newton->SetRelTol(1e-10);
-		   	petsc_newton->SetAbsTol(0.);
-			petsc_newton->SetMaxIter(250000);
-			petsc_newton->SetPrintLevel(1);
-
-			petsc_newton->iterative_mode = true;
-
-			SNES pn_snes = SNES(*petsc_newton);
-//			SNES pn_snes(*petsc_newton);
-
-			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
-			Vector bb;
-			timer.Start();
-		    petsc_newton->Mult(bb,x);
-
-
-	   }
-	   timer.Stop();
-	   if(myid==0){
-			cout<<"time: "<<timer.RealTime()<<endl;
-	   }
-
-	   /************************************************
-		* Calculate the residual in the dual norm,
-		* which can be used as an error estimator for 
-		* AMR (Adaptive Mesh Refinement)
-		* **********************************************/
-	   {
-		  linear_source_operator->ParallelAssemble( F_rec.GetBlock(1) );
-
-	      BlockVector LSres( offsets_test ), tmp( offsets_test );
-	      B.Mult(x, LSres);
-
-		  /* Bx - linear source */
-	      LSres -= F_rec;
-
-		  /* Bx - nonlinear source */
-		  F_rec = 0.;
-		  Vector F1(F_rec.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-		  ParGridFunction u0_now;
-		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
-    	  u0_now.MakeTRef(u0_space, u0_vec, 0);
-		  u0_now.SetFromTrueVector();
-    	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
-
-		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
-		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
-		  fu_mass->Assemble();
-
-		  fu_mass->ParallelAssemble(F1);
-		  LSres -= F_rec;
-
-		  /* calculate the dual norm */
-	      InverseGram.Mult(LSres, tmp);
-		  double res = sqrt(InnerProduct(LSres,tmp) );
-		  if(myid == 0){
-			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
-		  }
-	   }
-
-	// 10b. error 
-	   u0.Distribute( x.GetBlock(u0_var) );
-	   q0.Distribute( x.GetBlock(q0_var) );
-
-	   double u_l2_error = u0.ComputeL2Error(u_coeff);
-	   double q_l2_error = q0.ComputeL2Error(q_coeff);
-
-	   double u_max_error = u0.ComputeMaxError(u_coeff);
-	   double q_max_error = q0.ComputeMaxError(q_coeff);
-
-	   int global_ne = mesh->GetGlobalNE();
-	   if(myid == 0){
-			cout << "\nelement number of the mesh: "<< global_ne<<endl; 
-			cout<< "\n dimension: "<<dim<<endl;
-			printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
-			printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
-			cout<<endl;
-			printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
-			printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
-			cout<<endl;
-	   }
-
-	
-	   // 11. Save the refined mesh and the solution. This output can be viewed
-	   //     later using GLVis: "glvis -m refined.mesh -g sol.gf".
-	   ParGridFunction * q_projection_minus_num = NULL; 
-	   if(q_vis_error){
-		   q_projection_minus_num = new ParGridFunction(q0_space);
-		   q_projection_minus_num->ProjectCoefficient(q_coeff);
-		   *q_projection_minus_num -= q0;
-
-			/* linf on each processor */
-//		   cout<<q_projection_minus_num->Normlinf()<<endl;
-	   }
-
-	   {
-	      ostringstream mesh_name, sol_name;
-          mesh_name << "mesh." << setfill('0') << setw(6) << myid;
-          sol_name << "sol." << setfill('0') << setw(6) << myid;
-
-	      ofstream mesh_ofs(mesh_name.str().c_str() );
-	      mesh_ofs.precision(8);
-	      mesh->Print(mesh_ofs);
+   //   V0
+   //			S0 
+   //					Vhat
+   //							Shat
+   //    corresponding to the primal (x0) and interfacial (xhat) unknowns.
+   //
+   //  Actually, the exact blocks are
+   //		V0 = B_q_weak_div^T S^-1 B_q_weak_div
+   //		    +Mass_q^T  V^-1  Mass_q
+   //
+   //		S0 = u_dot_div^T  S^-1  u_dot_div
+   //
+   //       Vhat = q_jump^T S^-1 q_jump.
+   //  
+   //       Shat = u_normal_jump^T V^-1 u_normal_jump
+   //
+   //       One interesting fact:
+   //			V0 \approx Mass
+   //			S0 \approx Mass
+   //
+   // We want to approximate them.
+   /***************************************************************/
+      ParBilinearForm *S0 = new ParBilinearForm(u0_space);
+      S0->AddDomainIntegrator(new MassIntegrator() );
+      S0->Assemble();
+      S0->Finalize();
+      HypreParMatrix * AmatS0 = S0->ParallelAssemble(); delete S0;
+   
+   	// the exact form of the diagonal block //
+      HypreParMatrix * matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+      matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
+   
+      HypreParMatrix * Vhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
+   
+      /********************************************************/
+      /* perturbed amg preconditioner for the last block */
+      ParMixedBilinearForm *Sjump = NULL;
+      HypreParMatrix * matSjump = NULL;
+      HypreParMatrix * Shat = NULL;
+   
+      /* By default use petsc to define the AMG preconditioner for the
+   	* third block Shat, and no need to perturb Shat.
+   	* However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
+   	* to make it work */
+      if(!perturb){
+   		Shat = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
+      }
+      else{
+   	    amg_perturbation = min(1e-3, amg_perturbation);
+   		cout<<amg_perturbation<<endl;
+   		Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+      		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+      		Sjump->Assemble();
+      		Sjump->Finalize();
+      		Sjump->SpMat() *= amg_perturbation;
+      		Sjump->SpMat() += B_u_normal_jump->SpMat();
+      		matSjump=Sjump->ParallelAssemble(); 
+   		delete Sjump;
+   		delete B_u_normal_jump;
+           Shat = RAP(matSjump, matVinv, matSjump);
+      }
+      /********************************************************/
+	  /***********************************************************
+	  * 10a. Set up the 1x2 block Least Squares DPG operator, 
+	  *    the normal equation operator, A = B^t InverseGram B, and
+	  *    the normal equation right-hand-size, b = B^t InverseGram F.
+	  *
+	  *    B = mass_q     -u_dot_div 0        u_normal_jump
+	  *        q_weak_div  0         q_jump   0
+	  ********************************************************/
+	  BlockOperator B(offsets_test, offsets);
 	  
-	      ofstream sol_ofs(sol_name.str().c_str() );
-	      sol_ofs.precision(8);
-	      u0.Save(sol_ofs);
+	  B.SetBlock(0, q0_var  ,matB_mass_q);
+	  B.SetBlock(0, u0_var  ,matB_u_dot_div);
+	  B.SetBlock(0, uhat_var,matB_u_normal_jump);
 	  
-	      if(q_visual){
-	    	 ostringstream q_name;
-	    	 mesh_name<< "q."<<setfill('0')<<setw(6)<<myid;
-	         ofstream q_variable_ofs(q_name.str().c_str() );
-	         q_variable_ofs.precision(8);
-	         q0.Save(q_variable_ofs);
-	      }
-		  if(q_vis_error){
-	    	 ostringstream q_error_name;
-	    	 mesh_name<< "q_error."<<setfill('0')<<setw(6)<<myid;
-	         ofstream q_error_variable_ofs(q_error_name.str().c_str() );
-	         q_error_variable_ofs.precision(8);
-	         q_projection_minus_num->Save(q_error_variable_ofs);
-		  }
-	   }
-	  
-	   // 12. Send the solution by socket to a GLVis server.
-	   if (visualization)
-	   {
-	      char vishost[] = "localhost";
-	      int  visport   = 19916;
-	      socketstream sol_sock(vishost, visport);
-		  sol_sock << "parallel " << num_procs << " " << myid << "\n";
-      	  sol_sock.precision(8);
-      	  sol_sock << "solution\n" << *mesh <<  u0 << "window_title 'U' "<<endl;
+	  B.SetBlock(1, q0_var   ,matB_q_weak_div);
+	  B.SetBlock(1, qhat_var ,matB_q_jump);
 	
-		  if(q_visual){
-	         socketstream q_sock(vishost, visport);
-			 q_sock << "parallel " << num_procs << " " << myid << "\n";
-      	  	 q_sock.precision(8);
-      	  	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
-		  }
-		  /* plot error picture for q */
-		  if(q_vis_error){
-	         socketstream q_error_sock(vishost, visport);
-			 q_error_sock << "parallel " << num_procs << " " << myid << "\n";
-      	  	 q_error_sock.precision(8);
-      	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection_minus_num << "window_title 'Q_error' "<<endl;
-		  }
-	   }
-	   delete q_projection_minus_num;
+	
+	  /*********************************************
+	   * 10b. allocate memory to store 
+	   * Jac =  mass_q	 -u_dot_div  0		u_normal_jump
+	   *        q_weak_div -df/du      q_jump 0
+	   *	   = B - DF/DU
+	   * Now, we only allocate memory and set 
+	   * df/du = 0, and df/du block will be updated
+	   * during the nonlinear solve step
+	   * *******************************************/
+	  BlockOperator Jac(offsets_test,offsets);
+	  
+	  Jac.SetBlock(0, q0_var  ,matB_mass_q);
+	  Jac.SetBlock(0, u0_var  ,matB_u_dot_div);
+	  Jac.SetBlock(0, uhat_var,matB_u_normal_jump);
+	  
+	  Jac.SetBlock(1, q0_var   ,matB_q_weak_div);
+	  Jac.SetBlock(1, qhat_var ,matB_q_jump);
+	  
+	  
+	  BlockOperator InverseGram(offsets_test, offsets_test);
+	  InverseGram.SetBlock(0,0,matVinv);
+	  InverseGram.SetBlock(1,1,matSinv);
 
-//   // 13. Free the used memory.
+	  /*******************************************************************************
+	   * 11. pass all the pointer to the infomration interfce,
+	   * everything is passed to PETSC by FixedPointReducedSystemOperator,
+	   * Jac and A is updated throught the FixedPointReducedSystemOperator
+	   * ******************************************************************************/
+	  FixedPointReducedSystemOperator * reduced_system_operator = new FixedPointReducedSystemOperator(
+	   										&use_petsc,
+	   										&perturb,
+											/* finite element spaces */
+	   										u0_space, q0_space, uhat_space, qhat_space,
+	   										vtest_space, stest_space,
+											/* linear forms */
+	   										linear_source_operator,
+											/* vector corresponding to linear forms */
+	   										F,
+											/* bilinear forms */
+											B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
+											Vinv, Sinv,
+											/* matrices */
+	   										matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+	   										matB_q_jump, matVinv, matSinv,
+	   										matV0, AmatS0, Vhat, Shat, 
+											/* block sizes */
+	   										offsets, offsets_test,
+											/* block operators */
+	   										&B,
+	   										&Jac,
+	   										&InverseGram,
+											/* boundary conditions */
+	   										ess_trace_vdof_list,
+	   										&b
+	  );
+	
+      for(int amr_iter = 0; amr_iter<1 ; amr_iter++){
+       	// 12. Solve the normal equation system using the PCG iterative solver.
+       	//     Check the weighted norm of residual for the DPG least square problem.
+       	//     Wrap the primal variable in a GridFunction for visualization purposes.
+       	   StopWatch timer;
+       	   if(!use_petsc){
+       		   if(myid == 0){
+       				cout<<"Wrong! PETSC is not used!"<<endl<<endl;
+       		   }
+       	   }
+       	   else{
+       		    PetscNonlinearSolver * petsc_anderson = new PetscNonlinearSolver( MPI_COMM_WORLD );
+       		    petsc_anderson->SetOperator( *reduced_system_operator );
+       		    petsc_anderson->SetRelTol(1e-10);
+       		   	petsc_anderson->SetAbsTol(0.);
+       			petsc_anderson->SetMaxIter(250000);
+       			petsc_anderson->SetPrintLevel(1);
+       
+       			petsc_anderson->iterative_mode = true;
+       
+       			SNES pn_snes = SNES(*petsc_anderson);
+       
+       			/* empty vector bb means that we are solving nonlinear_fun(x) = 0 */
+       			Vector bb;
+       			timer.Start();
+       		    petsc_anderson->Mult(bb,x);
+       	   }
+       	   timer.Stop();
+       	   if(myid==0){
+       			cout<<"time: "<<timer.RealTime()<<endl;
+       	   }
+       
+       	   /************************************************
+       		* Calculate the residual in the dual norm,
+       		* which can be used as an error estimator for 
+       		* AMR (Adaptive Mesh Refinement)
+       		* **********************************************/
+       	   {
+       		  linear_source_operator->ParallelAssemble( F_rec.GetBlock(1) );
+       
+       	      BlockVector LSres( offsets_test ), tmp( offsets_test );
+       	      B.Mult(x, LSres);
+       
+       		  /* Bx - linear source */
+       	      LSres -= F_rec;
+       
+       		  /* Bx - nonlinear source */
+       		  F_rec = 0.;
+       		  Vector F1(F_rec.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+       		  ParGridFunction u0_now;
+       		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+           	  u0_now.MakeTRef(u0_space, u0_vec, 0);
+       		  u0_now.SetFromTrueVector();
+           	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+       
+       		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+       		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+       		  fu_mass->Assemble();
+       
+       		  fu_mass->ParallelAssemble(F1);
+       		  LSres -= F_rec;
+       
+       		  /* calculate the dual norm */
+       	      InverseGram.Mult(LSres, tmp);
+       		  double res = sqrt(InnerProduct(LSres,tmp) );
+       		  if(myid == 0){
+       			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
+       		  }
+       	   }
+       
+       	// 13. error 
+       	   u0.Distribute( x.GetBlock(u0_var) );
+       	   q0.Distribute( x.GetBlock(q0_var) );
+       
+       	   double u_l2_error = u0.ComputeL2Error(u_coeff);
+       	   double q_l2_error = q0.ComputeL2Error(q_coeff);
+       
+       	   double u_max_error = u0.ComputeMaxError(u_coeff);
+       	   double q_max_error = q0.ComputeMaxError(q_coeff);
+       
+       	   int global_ne = mesh->GetGlobalNE();
+       	   if(myid == 0){
+       			cout << "\nelement number of the mesh: "<< global_ne<<endl; 
+       			cout<< "\n dimension: "<<dim<<endl;
+       			printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
+       			printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
+       			cout<<endl;
+       			printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
+       			printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
+       			cout<<endl;
+       	   }
+       
+       	
+       	// 14. Visualization
+       	//	   Save the refined mesh and the solution. This output can be viewed
+       	//     later using GLVis: "glvis -m refined.mesh -g sol.gf".
+       	   ParGridFunction * q_projection_minus_num = NULL; 
+       	   if(q_vis_error){
+       		   q_projection_minus_num = new ParGridFunction(q0_space);
+       		   q_projection_minus_num->ProjectCoefficient(q_coeff);
+       		   *q_projection_minus_num -= q0;
+       	   }
+       
+       	   {
+       	      ostringstream mesh_name, sol_name;
+                 mesh_name << "mesh." << setfill('0') << setw(6) << myid;
+                 sol_name << "sol." << setfill('0') << setw(6) << myid;
+       
+       	      ofstream mesh_ofs(mesh_name.str().c_str() );
+       	      mesh_ofs.precision(8);
+       	      mesh->Print(mesh_ofs);
+       	  
+       	      ofstream sol_ofs(sol_name.str().c_str() );
+       	      sol_ofs.precision(8);
+       	      u0.Save(sol_ofs);
+       	  
+       	      if(q_visual){
+       	    	 ostringstream q_name;
+       	    	 mesh_name<< "q."<<setfill('0')<<setw(6)<<myid;
+       	         ofstream q_variable_ofs(q_name.str().c_str() );
+       	         q_variable_ofs.precision(8);
+       	         q0.Save(q_variable_ofs);
+       	      }
+       		  if(q_vis_error){
+       	    	 ostringstream q_error_name;
+       	    	 mesh_name<< "q_error."<<setfill('0')<<setw(6)<<myid;
+       	         ofstream q_error_variable_ofs(q_error_name.str().c_str() );
+       	         q_error_variable_ofs.precision(8);
+       	         q_projection_minus_num->Save(q_error_variable_ofs);
+       		  }
+       	   }
+       	  
+       	   // 14b. Send the solution by socket to a GLVis server.
+       	   if (visualization)
+       	   {
+       	      char vishost[] = "localhost";
+       	      int  visport   = 19916;
+       	      socketstream sol_sock(vishost, visport);
+       		  sol_sock << "parallel " << num_procs << " " << myid << "\n";
+             	  sol_sock.precision(8);
+             	  sol_sock << "solution\n" << *mesh <<  u0 << "window_title 'U' "<<endl;
+       	
+       		  if(q_visual){
+       	         socketstream q_sock(vishost, visport);
+       			 q_sock << "parallel " << num_procs << " " << myid << "\n";
+             	  	 q_sock.precision(8);
+             	  	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
+       		  }
+       		  /* plot error picture for q */
+       		  if(q_vis_error){
+       	         socketstream q_error_sock(vishost, visport);
+       			 q_error_sock << "parallel " << num_procs << " " << myid << "\n";
+             	  	 q_error_sock.precision(8);
+             	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection_minus_num << "window_title 'Q_error' "<<endl;
+       		  }
+       	   }
+       	   delete q_projection_minus_num;
+
+          // 15. Obtain the error estimator and refine the mesh
+		  // 15a. Error estimator
+		  // 15b. Refine the mesh
+		  if(amr_iter>amr_refine_level){
+			  break; /* stop the AMR iteration */
+		  }
+		  else{
+				mesh->UniformRefinement();
+			if(myid == 0){
+				cout<<"Refinement "<<amr_iter<<" with "<<mesh->GetNE()<<" elements"<<endl;
+			}
+		  }
+
+		  // 16. Update the finite element spaces, linear, bilinear forms
+		  // and matrices,
+		  // update is defined in FixedPointReducedSystemOperator
+
+       } /* end of AMR loop */
+
+//   // 15. Free the used memory.
 	/* reduced system operator */
    delete reduced_system_operator;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
+
+   delete B_mass_q;
+   delete B_u_dot_div;
+   delete B_q_weak_div;
+   delete B_q_jump;
+   if(prec_amg != 1){	
+	   delete B_u_normal_jump;
+   }
    /* matrix */
    delete matB_mass_q;
    delete matB_u_dot_div;

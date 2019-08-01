@@ -49,6 +49,11 @@ private:
 	 *****************************************/
 	ParFiniteElementSpace * vtest_space, * stest_space;
 	/*************************************
+	 *  Bilinear Forms
+	 * ***********************************/
+	ParMixedBilinearForm *B_mass_q, * B_u_dot_div, * B_u_normal_jump, * B_q_weak_div, * B_q_jump;
+	ParBilinearForm *Vinv, *Sinv;
+	/*************************************
 	 * Pointer to parallel matrix
 	 * ***********************************/
     HypreParMatrix * matB_mass_q; 
@@ -117,21 +122,32 @@ public:
 	FixedPointReducedSystemOperator(
 			bool * _use_petsc,
 			bool * _perturb,
+			/* Finite Element Spaces */
 			ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 			ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
+			/* linear forms */
+			ParLinearForm * _linear_source_operator,
+			/* vector corresponding to lienar form */
+			Vector &_F,
+			/* Bilinear Form */
+			ParMixedBilinearForm *_B_mass_q, ParMixedBilinearForm *_B_u_dot_div, ParMixedBilinearForm *_B_u_normal_jump,
+		    ParMixedBilinearForm *_B_q_weak_div, ParMixedBilinearForm * _B_q_jump,
+			ParBilinearForm *_Vinv, ParBilinearForm * _Sinv,
+			/* matrices */
 			HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 			HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
-			/* preconditioner */
 			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+			/* block structure */
 			Array<int> _offsets, Array<int> _offsets_test,
+			/* block operators */
 			BlockOperator* _B,
 			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
+			/* boundary conditions */
 			const Array<int> &_ess_trace_vdof_list,
-			Vector *_b,
-			Vector &_F,
+			Vector *_b
+			/* preconditioner */
 //		    BlockDiagonalPreconditioner * _P,
-			ParLinearForm * _linear_source_operator
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
 	virtual void UpdateNDFDU(const Vector &x) const;
@@ -152,35 +168,57 @@ public:
 FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	bool * _use_petsc,
 	bool * _perturb,
+	/* Finite Element spaces */
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
+	/* lienar form */
+	ParLinearForm * _linear_source_operator,
+	/* vector corresponding to linear form */
+	Vector &_F,
+	/* bilinear forms */
+	ParMixedBilinearForm *_B_mass_q, ParMixedBilinearForm *_B_u_dot_div, ParMixedBilinearForm *_B_u_normal_jump,
+	ParMixedBilinearForm *_B_q_weak_div, ParMixedBilinearForm * _B_q_jump,
+	ParBilinearForm *_Vinv, ParBilinearForm * _Sinv,
+	/* matrices */
 	HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
 	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+	/* block structures */
 	Array<int> _offsets, Array<int> _offsets_test,
+	/* block operators */
 	BlockOperator* _B,
 	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
+	/* boundary conditons */
 	const Array<int> &_ess_trace_vdof_list,
-	Vector *_b,
-	Vector &_F,
+	Vector *_b
 //	BlockDiagonalPreconditioner * _P,
-	ParLinearForm * _linear_source_operator
 	):
+    /* operator size */
 	Operator( _B->Width() ), /* size of operator, important !!! */
+	/* finite element spaces */
 	u0_space(_u0_space), q0_space(_q0_space), uhat_space(_uhat_space), qhat_space(_qhat_space),
 	vtest_space(_vtest_space), stest_space(_stest_space),
+	/* linear form */
+	linear_source_operator(_linear_source_operator),
+	/* vector for the lienar form */
+	F(_F),
+	/* bilinear forms */
+	B_mass_q(_B_mass_q), B_u_dot_div(_B_u_dot_div), B_u_normal_jump(_B_u_normal_jump),
+	B_q_weak_div(_B_q_weak_div), B_q_jump(_B_q_jump),Vinv(_Vinv), Sinv(_Sinv),
+	/* matrices */
 	matB_mass_q(_matB_mass_q), matB_u_normal_jump(_matB_u_normal_jump), matB_q_weak_div(_matB_q_weak_div),
 	matB_q_jump(_matB_q_jump), matVinv(_matVinv), matSinv(_matSinv), 
 	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
+	/* block structure */
 	offsets(_offsets), offsets_test(_offsets_test),
+	/* block operators */
 	B(_B),
 	Jac(_Jac),
 	Ginv(_Ginv),
+	/* boundary conditions */
 	ess_trace_vdof_list(_ess_trace_vdof_list),
-	linear_source_operator(_linear_source_operator),
 	b(_b),
-	F(_F),
 	Jacobian(NULL),
 	NDfDu(NULL),
 	use_petsc(_use_petsc),
