@@ -70,10 +70,10 @@ private:
 	/***********************************************************
 	 * pointer to parallel matrix corresponding to the preconditioner
 	 * *********************************************************/
-	HypreParMatrix * matV0;
-	HypreParMatrix * matS0;
-	HypreParMatrix * matVhat;
-	HypreParMatrix * matShat;
+//	HypreParMatrix * matV0;
+//	HypreParMatrix * matS0;
+//	HypreParMatrix * matVhat;
+//	HypreParMatrix * matShat;
 	/******************************
 	 * block structures
 	 * ****************************/
@@ -90,17 +90,15 @@ private:
 	 * *****************************/
 	mutable BlockOperator * B;
 	mutable BlockOperator * Ginv;
-	Vector *b;
 	BlockVector &F;
 
-	PetscLinearSolver * solver;
-
-	mutable BlockDiagonalPreconditioner * prec;
-	mutable HypreBoomerAMG * prec0;
-	mutable HypreBoomerAMG * prec1;
-	mutable Solver * prec2;
-	mutable PetscLinearSolver * prec3;
-	mutable HypreBoomerAMG * mfem_prec3;
+	BlockDiagonalPreconditioner * P;
+//	mutable BlockDiagonalPreconditioner * prec;
+//	mutable HypreBoomerAMG * prec0;
+//	mutable HypreBoomerAMG * prec1;
+//	mutable Solver * prec2;
+//	mutable PetscLinearSolver * prec3;
+//	mutable HypreBoomerAMG * mfem_prec3;
 
 	/* operator calculate J^T G^-1 Bx */
 	mutable Operator * JTGinvB;
@@ -135,7 +133,7 @@ public:
 			/* matrices */
 			HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 			HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
-			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+//			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 			/* block structure */
 			Array<int> &_offsets, Array<int> &_offsets_test,
 			/* block operators */
@@ -144,9 +142,8 @@ public:
 			BlockOperator* _Ginv,
 			/* boundary conditions */
 			Array<int> &_ess_trace_vdof_list,
-			Vector *_b
 			/* preconditioner */
-//		    BlockDiagonalPreconditioner * _P,
+		    BlockDiagonalPreconditioner * _P
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
 	virtual void UpdateNDFDU(const Vector &x) const;
@@ -186,7 +183,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	/* matrices */
 	HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
-	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+//	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
 	/* block structures */
 	Array<int> &_offsets, Array<int> &_offsets_test,
 	/* block operators */
@@ -195,8 +192,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	BlockOperator* _Ginv,
 	/* boundary conditons */
 	Array<int> &_ess_trace_vdof_list,
-	Vector *_b
-//	BlockDiagonalPreconditioner * _P,
+	BlockDiagonalPreconditioner * _P
 	):
     /* operator size */
 	Operator( _B->Width() ), /* size of operator, important !!! */
@@ -213,7 +209,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	/* matrices */
 	matB_mass_q(_matB_mass_q), matB_u_normal_jump(_matB_u_normal_jump), matB_q_weak_div(_matB_q_weak_div),
 	matB_q_jump(_matB_q_jump), matVinv(_matVinv), matSinv(_matSinv), 
-	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
+//	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
 	/* block structure */
 	offsets(_offsets), offsets_test(_offsets_test),
 	/* block operators */
@@ -222,110 +218,99 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	Ginv(_Ginv),
 	/* boundary conditions */
 	ess_trace_vdof_list(_ess_trace_vdof_list),
-	b(_b),
 	Jacobian(NULL),
 	NDfDu(NULL),
 	use_petsc(_use_petsc),
 	perturb(_perturb),
     fu(offsets_test[2] - offsets_test[1] ),
-//	P(_P),
+	P(_P),
 	JTGinvB(NULL)
 {
 
 	/* initialize preconditioner */
-    prec = new BlockDiagonalPreconditioner(offsets);
+//    prec = new BlockDiagonalPreconditioner(offsets);
+//
+//	prec0 = new HypreBoomerAMG( *matV0 );
+//	prec0->SetPrintLevel(0);
+//
+//    prec1 = new HypreBoomerAMG( *matS0 );	
+//	prec1->SetPrintLevel(0);
+//
+//	prec2 = new HypreAMS( *matVhat, qhat_space );
+////	prec2->SetPrintLevel(1);
+//	
+////	prec3 = new HypreBoomerAMG( *matShat );
+////	prec3->SetPrintLevel(0);
+//
+//	prec3 = NULL;
+//	mfem_prec3 = NULL;
+//	
+//	prec->SetDiagonalBlock(0,prec0);
+//	prec->SetDiagonalBlock(1,prec1);
+//	prec->SetDiagonalBlock(2,prec2);
+//	if( !(*perturb) ){
+//		prec3 = new PetscLinearSolver( *matShat );
+//		prec3->SetPrintLevel(0);
+//		prec3->iterative_mode = true;
+//
+//		KSP ksp_prec3 = KSP(*prec3);
+//		KSPSetType(ksp_prec3,KSPFCG);
+//		KSPAppendOptionsPrefix(ksp_prec3,"s3_");
+//		PC  pc_prec3;
+//		KSPGetPC(ksp_prec3,&pc_prec3);
+//		PCSetType(pc_prec3,PCHYPRE);
+//
+//		prec->SetDiagonalBlock(3,prec3);
+//	}
+//	else{
+//		mfem_prec3 = new HypreBoomerAMG( *matShat);
+//		mfem_prec3->SetPrintLevel(0);
+//
+//		prec->SetDiagonalBlock(3,mfem_prec3);
+//	}/* end of if */
 
-	prec0 = new HypreBoomerAMG( *matV0 );
-	prec0->SetPrintLevel(0);
 
-    prec1 = new HypreBoomerAMG( *matS0 );	
-	prec1->SetPrintLevel(0);
+}
+/******************************************************
+ *  Update NDfDu = DF(u)/Du
+ *******************************************************/
+void FixedPointReducedSystemOperator::UpdateNDFDU(const Vector &x) const
+{
+	/* calculate df(u)/du  */
+	delete NDfDu;
+	ParGridFunction u0_now;
 
-	prec2 = new HypreAMS( *matVhat, qhat_space );
-//	prec2->SetPrintLevel(1);
+	Vector u0_vec(x.GetData(), x.Size() );
+	u0_now.MakeTRef(u0_space,u0_vec , 0);
+	u0_now.SetFromTrueVector();
+//    DFDUCoefficient dfu_coefficient( &u0_now );
+	FUXCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
+//    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
+
+	ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
+	mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
+	mass_u->Assemble();
+	mass_u->Finalize();
+	mass_u->SpMat() *= -1.;
+
+	NDfDu = mass_u->ParallelAssemble();
+	delete mass_u;
 	
-//	prec3 = new HypreBoomerAMG( *matShat );
-//	prec3->SetPrintLevel(0);
+}
+/******************************************************
+ *  Update Jac = B - Df/dx
+ *******************************************************/
+void FixedPointReducedSystemOperator::UpdateJac(const Vector &x) const
+{
+	/* calculate df(u)/du  */
+//	UpdateNDFDU(x);
 
-	prec3 = NULL;
-	mfem_prec3 = NULL;
+	Jac->SetBlock(1,1,NDfDu );
 	
-	prec->SetDiagonalBlock(0,prec0);
-	prec->SetDiagonalBlock(1,prec1);
-	prec->SetDiagonalBlock(2,prec2);
-	if( !(*perturb) ){
-		prec3 = new PetscLinearSolver( *matShat );
-		prec3->SetPrintLevel(0);
-		prec3->iterative_mode = true;
-
-		KSP ksp_prec3 = KSP(*prec3);
-		KSPSetType(ksp_prec3,KSPFCG);
-		KSPAppendOptionsPrefix(ksp_prec3,"s3_");
-		PC  pc_prec3;
-		KSPGetPC(ksp_prec3,&pc_prec3);
-		PCSetType(pc_prec3,PCHYPRE);
-
-		prec->SetDiagonalBlock(3,prec3);
-	}
-	else{
-		mfem_prec3 = new HypreBoomerAMG( *matShat);
-		mfem_prec3->SetPrintLevel(0);
-
-		prec->SetDiagonalBlock(3,mfem_prec3);
-	}
-
-
-		/* initialize linear solver */
-	//	solver = new FGMRESSolver(MPI_COMM_WORLD);
-		solver = new PetscLinearSolver(MPI_COMM_WORLD);
-		solver->SetRelTol(petsc_linear_solver_rel_tol);
-	//	solver->SetMaxIter(10000);
-	//	solver->SetPrintLevel(1000);
-		solver->SetMaxIter(3000);
-	//	solver->SetPreconditioner(*P);
-		solver->SetPreconditioner(*prec);
-		solver->iterative_mode = true; /* turn on the interative mode to take initial guess */
-	}
-	/******************************************************
-	 *  Update NDfDu = DF(u)/Du
-	 *******************************************************/
-	void FixedPointReducedSystemOperator::UpdateNDFDU(const Vector &x) const
-	{
-		/* calculate df(u)/du  */
-		delete NDfDu;
-		ParGridFunction u0_now;
-
-		Vector u0_vec(x.GetData(), x.Size() );
-		u0_now.MakeTRef(u0_space,u0_vec , 0);
-		u0_now.SetFromTrueVector();
-	//    DFDUCoefficient dfu_coefficient( &u0_now );
-		FUXCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
-	//    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
-
-		ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
-		mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
-		mass_u->Assemble();
-		mass_u->Finalize();
-		mass_u->SpMat() *= -1.;
-
-		NDfDu = mass_u->ParallelAssemble();
-		delete mass_u;
-		
-	}
-	/******************************************************
-	 *  Update Jac = B - Df/dx
-	 *******************************************************/
-	void FixedPointReducedSystemOperator::UpdateJac(const Vector &x) const
-	{
-		/* calculate df(u)/du  */
-	//	UpdateNDFDU(x);
-
-		Jac->SetBlock(1,1,NDfDu );
-		
-	}
-	/******************************************************
-	 *  Try to solve F(x) = 0
-	 *  Mult gives us y = F(x)
+}
+/******************************************************
+ *  Try to solve F(x) = 0
+ *  Mult gives us y = F(x)
  *******************************************************/
 void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
@@ -335,8 +320,16 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	UpdateJac(x);
 
 	/* set linear solver to approximate (J^TG^-1B)^-1 */
+	PetscLinearSolver solver(MPI_COMM_WORLD);
+	solver.SetRelTol(petsc_linear_solver_rel_tol);
+	solver.SetPrintLevel(0);
+	solver.SetMaxIter(300);
+	solver.SetPreconditioner(*P);
+//	solver.SetPreconditioner(*prec);
+	solver.iterative_mode = true; /* turn on the interative mode to take initial guess */
+
 	JTGinvB = new RAPOperator(*Jac,*Ginv,*B);
-	solver->SetOperator(*JTGinvB);
+	solver.SetOperator(*JTGinvB);
 
 	/****************************************************************************/
 	/* calculate the right hand side J^T G^-1 F(x) */
@@ -372,21 +365,20 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	rhs *= -1.;
 	/****************************************************************************/
 	y = x; /* given initial guess for the KSP solve */
-	solver->Mult(rhs,y); /* calculate  -(J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
+	solver.Mult(rhs,y); /* calculate  -(J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
 	y += x;			/* y = x - (J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
 
 	delete JTGinvB;
 }
 
 FixedPointReducedSystemOperator::~FixedPointReducedSystemOperator(){
-	delete solver;
-	delete prec;
-
-	delete prec0;
-	delete prec1;
-	delete prec2;
-	delete prec3;
-	delete mfem_prec3;
+//	delete prec;
+//
+//	delete prec0;
+//	delete prec1;
+//	delete prec2;
+//	delete prec3;
+//	delete mfem_prec3;
 
 	delete Jacobian;
 }
@@ -434,7 +426,6 @@ void FixedPointReducedSystemOperator::UpdateOperators(ParGridFunction &uhat){
 	linear_source_operator->Update();
 	linear_source_operator->Assemble();
 
-	cout<<"linear form updated"<<endl;
 	/*************************************
 	* 2 update the block vector 
 	* ************************************/
@@ -472,7 +463,6 @@ void FixedPointReducedSystemOperator::UpdateOperators(ParGridFunction &uhat){
 	Sinv->Update();
 	Sinv->Assemble();
 	Sinv->Finalize();
-	cout<<"bilinear form updated"<<endl;
 
 	/*********************************
 	 * 4 update the matrices
@@ -482,6 +472,7 @@ void FixedPointReducedSystemOperator::UpdateOperators(ParGridFunction &uhat){
     matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
     matB_q_weak_div = B_q_weak_div->ParallelAssemble();
     matB_q_jump = B_q_jump->ParallelAssemble();
+
 
     matVinv = Vinv->ParallelAssemble();
     matSinv = Sinv->ParallelAssemble();
@@ -517,7 +508,6 @@ void FixedPointReducedSystemOperator::UpdateOperators(ParGridFunction &uhat){
 
 	Ginv->SetBlock(0,0,matVinv);
 	Ginv->SetBlock(1,1,matSinv); 
-	cout<<"block operator updated"<<endl;
 }
 
 void FixedPointReducedSystemOperator:: UpdateSolver(){
