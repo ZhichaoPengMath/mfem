@@ -304,14 +304,13 @@ int main(int argc, char *argv[])
    //    the FEM linear system, which in this case is (f,phi_i) where f=1.0 and
    //    phi_i are the basis functions in the test finite element fespace.
 
-   BlockVector x(offsets), b(offsets);
+   BlockVector x(offsets);
+//   BlockVector b(offsets);
    x = 0.;
 
 
    BlockVector F(offsets_test); /* block vector for the linear form on the right hand side */
    F = 0.;
-   BlockVector F_rec(offsets_test);
-   F_rec = 0.;
 
    ConstantCoefficient one(1.0);          /* coefficients */
    VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
@@ -321,9 +320,6 @@ int main(int argc, char *argv[])
    FunctionCoefficient r_coeff( r_exact ); /* coefficients */
 
 
-   ParGridFunction u0(u0_space);
-
-   ParGridFunction q0(q0_space);
 
    ParGridFunction uhat;
    uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
@@ -392,7 +388,6 @@ int main(int argc, char *argv[])
    B_u_normal_jump->Assemble();
    B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
    B_u_normal_jump->Finalize();
-   F_rec = F; /* deal with boundary condition here, so that when calculating dual norm things will be correct */
 
    if(myid == 0){
 		cout<<endl<<"< u, tau cdot n > assembled"<<endl;
@@ -590,82 +585,12 @@ int main(int argc, char *argv[])
         matShat = RAP(matSjump, matVinv, matSjump);
       }
 
-      BlockDiagonalPreconditioner * prec = NULL;
-	  HypreBoomerAMG * prec0 =NULL;
-	  HypreBoomerAMG * prec1 =NULL;
-	  HypreAMS * prec2 =NULL;
-	  PetscLinearSolver * prec3 = NULL;
-	  HypreBoomerAMG * mfem_prec3 =NULL;
-
-	  prec = new BlockDiagonalPreconditioner(offsets);
-
-	  prec0 = new HypreBoomerAMG( *matV0 );
-	  prec0->SetPrintLevel(0);
-
-      prec1 = new HypreBoomerAMG( *matS0 );	
-	  prec1->SetPrintLevel(0);
-
-	  prec2 = new HypreAMS( *matVhat, qhat_space );
-	  prec2->SetPrintLevel(1);
-	  prec->SetDiagonalBlock(0,prec0);
-	  prec->SetDiagonalBlock(1,prec1);
-	  prec->SetDiagonalBlock(2,prec2);
-	  if( !perturb ){
-	  	prec3 = new PetscLinearSolver( MPI_COMM_WORLD );
-		prec3->SetOperator(*matShat);
-	  	prec3->SetPrintLevel(0);
-//	  	prec3->iterative_mode = true;
-
-	  	KSP ksp_prec3 = KSP(*prec3);
-	  	KSPSetType(ksp_prec3,KSPFCG);
-	  	KSPAppendOptionsPrefix(ksp_prec3,"s3_");
-	  	PC  pc_prec3;
-	  	KSPGetPC(ksp_prec3,&pc_prec3);
-	  	PCSetType(pc_prec3,PCHYPRE);
-
-	  	prec->SetDiagonalBlock(3,prec3);
-	  }
-	  else{
-	  	mfem_prec3 = new HypreBoomerAMG( *matShat);
-	  	mfem_prec3->SetPrintLevel(0);
-
-	  	prec->SetDiagonalBlock(3,mfem_prec3);
-	  }/* end of if */
-
-
 	  /*******************************************************************************
 	   * 10. pass all the pointer to the infomration interfce,
 	   * everything is passed to PETSC by FixedPointReducedSystemOperator,
 	   * Jac and A is updated throught the FixedPointReducedSystemOperator
 	   * ******************************************************************************/
-	  FixedPointReducedSystemOperator * reduced_system_operator = new FixedPointReducedSystemOperator(
-	   										&use_petsc,
-	   										&perturb,
-											/* finite element spaces */
-	   										u0_space, q0_space, uhat_space, qhat_space,
-	   										vtest_space, stest_space,
-											/* linear forms */
-	   										linear_source_operator,
-											/* vector corresponding to linear forms */
-	   										F,
-											/* bilinear forms */
-											B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
-											Vinv, Sinv,
-											/* matrices */
-	   										matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
-	   										matB_q_jump, matVinv, matSinv,
-//	   										matV0, matS0, matVhat, matShat, 
-											/* block sizes */
-	   										offsets, offsets_test,
-											/* block operators */
-	   										B,
-	   										Jac,
-	   										InverseGram,
-											/* boundary conditions */
-	   										ess_trace_vdof_list,
-											/* preconditioner */
-											prec
-	  );
+	  FixedPointReducedSystemOperator * reduced_system_operator = NULL;
 	
 	  /*******************************************************************************
 	   * 11. Adaptive mesh refinement loop
@@ -674,7 +599,78 @@ int main(int argc, char *argv[])
        *     Wrap the primal variable in a GridFunction for visualization purposes.
 	   * ******************************************************************************/
       for(int amr_iter = 0; amr_iter<=amr_refine_level ; amr_iter++){
+           ParGridFunction u0(u0_space);
+           ParGridFunction q0(q0_space);
+
        	   StopWatch timer;
+
+	       BlockDiagonalPreconditioner prec(offsets);
+
+	       HypreBoomerAMG prec0( *matV0 );
+	       prec0.SetPrintLevel(0);
+
+           HypreBoomerAMG prec1( *matS0 );	
+	       prec1.SetPrintLevel(0);
+
+	       HypreAMS prec2( *matVhat, qhat_space );
+	       prec2.SetPrintLevel(1);
+	       prec.SetDiagonalBlock(0,&prec0);
+	       prec.SetDiagonalBlock(1,&prec1);
+	       prec.SetDiagonalBlock(2,&prec2);
+
+		   PetscLinearSolver prec3(MPI_COMM_WORLD);
+		   HypreBoomerAMG mfem_prec3;
+	       if( !perturb ){
+	           prec3.SetOperator(*matShat);
+	       	   prec3.SetPrintLevel(0);
+//	       	   prec3->iterative_mode = true;
+
+	       	   KSP ksp_prec3 = KSP(prec3);
+	       	   KSPSetType(ksp_prec3,KSPFCG);
+	       	   KSPAppendOptionsPrefix(ksp_prec3,"s3_");
+	       	   PC  pc_prec3;
+	       	   KSPGetPC(ksp_prec3,&pc_prec3);
+	       	   PCSetType(pc_prec3,PCHYPRE);
+
+	       	   prec.SetDiagonalBlock(3,&prec3);
+	       }
+	       else{
+		       mfem_prec3.SetOperator(*matShat);
+	       	   mfem_prec3.SetPrintLevel(0);
+
+	       	   prec.SetDiagonalBlock(3,&mfem_prec3);
+	       }/* end of if */
+
+
+		   reduced_system_operator =  new FixedPointReducedSystemOperator(
+	  	    										&use_petsc,
+	  	    										&perturb,
+	  	     									/* finite element spaces */
+	  	    										u0_space, q0_space, uhat_space, qhat_space,
+	  	    										vtest_space, stest_space,
+	  	     									/* linear forms */
+	  	    										linear_source_operator,
+	  	     									/* vector corresponding to linear forms */
+	  	    										F,
+	  	     									/* bilinear forms */
+	  	     									B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
+	  	     									Vinv, Sinv,
+	  	     									/* matrices */
+	  	    										matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
+	  	    										matB_q_jump, matVinv, matSinv,
+//	  	    										matV0, matS0, matVhat, matShat, 
+	  	     									/* block sizes */
+	  	    										offsets, offsets_test,
+	  	     									/* block operators */
+	  	    										B,
+	  	    										Jac,
+	  	    										InverseGram,
+	  	     									/* boundary conditions */
+	  	    										ess_trace_vdof_list,
+	  	     									/* preconditioner */
+												    prec
+	  	   );
+
        	   if(!use_petsc){
        		   if(myid == 0){
        				cout<<"Wrong! PETSC is not used!"<<endl<<endl;
@@ -707,38 +703,38 @@ int main(int argc, char *argv[])
        		* which can be used as an error estimator for 
        		* AMR (Adaptive Mesh Refinement)
        		* **********************************************/
-//       	   {
-//       		  linear_source_operator->ParallelAssemble( F.GetBlock(1) );
-//       
-//       	      BlockVector LSres( offsets_test ), tmp( offsets_test );
-//       	      B->Mult(x, LSres);
-//       
-//       		  /* Bx - linear source */
-//       	      LSres -= F;
-//       
-//       		  /* Bx - nonlinear source */
-//       		  F = 0.;
-//       		  Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-//       		  ParGridFunction u0_now;
-//       		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
-//           	  u0_now.MakeTRef(u0_space, u0_vec, 0);
-//       		  u0_now.SetFromTrueVector();
-//           	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
-//       
-//       		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
-//       		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
-//       		  fu_mass->Assemble();
-//       
-//       		  fu_mass->ParallelAssemble(F1);
-//       		  LSres -= F;
-//       
-//       		  /* calculate the dual norm */
-//       	      InverseGram->Mult(LSres, tmp);
-//       		  double res = sqrt(InnerProduct(LSres,tmp) );
-//       		  if(myid == 0){
-//       			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
-//       		  }
-//       	   }
+       	   {
+       		  linear_source_operator->ParallelAssemble( F.GetBlock(1) );
+       
+       	      BlockVector LSres( offsets_test ), tmp( offsets_test );
+       	      B->Mult(x, LSres);
+       
+       		  /* Bx - linear source */
+       	      LSres -= F;
+       
+       		  /* Bx - nonlinear source */
+       		  F = 0.;
+       		  Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+       		  ParGridFunction u0_now;
+       		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+           	  u0_now.MakeTRef(u0_space, u0_vec, 0);
+       		  u0_now.SetFromTrueVector();
+           	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+       
+       		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+       		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+       		  fu_mass->Assemble();
+       
+       		  fu_mass->ParallelAssemble(F1);
+       		  LSres -= F;
+       
+       		  /* calculate the dual norm */
+       	      InverseGram->Mult(LSres, tmp);
+       		  double res = sqrt(InnerProduct(LSres,tmp) );
+       		  if(myid == 0){
+       			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
+       		  }
+       	   }
        
 //       	// 12. error 
        	   u0.Distribute( x.GetBlock(u0_var) );
@@ -842,33 +838,175 @@ int main(int argc, char *argv[])
 		  	cout<<"Refinement "<<amr_iter<<" with "<<mesh->GetNE()<<" elements"<<endl;
 		  }
 
-		  // 15. Update the finite element spaces, linear, bilinear forms
-		  // and matrices,
-		  // update is defined in FixedPointReducedSystemOperator
-
+		  /**********************************************************************
+		  * 15. Update the finite element spaces, linear, bilinear forms
+		  * and matrices,
+		  * update is defined in FixedPointReducedSystemOperator
+		  **********************************************************************/
+		  /****************************************/
 		  /* 15a. update the finite element space */
-		  reduced_system_operator->UpdateFEMSpace();
-		  /* 15b. update the block vectors, grid functions and deal with boundary condition */
+		  /****************************************/
+		  q0_space->Update();
+		  u0_space->Update();
+		  qhat_space->Update(false);
+		  uhat_space->Update(false);
+
+		  vtest_space->Update();
+		  stest_space->Update();
+
+		  /*******************************************************/
+		  /* 15b. update the block structures					 */
+		  /*******************************************************/
+		  offsets[0] = 0;
+		  offsets[1] = q0_space->TrueVSize();
+		  offsets[2] = offsets[1] + u0_space->TrueVSize();
+		  offsets[3] = offsets[2] + qhat_space->TrueVSize();
+		  offsets[4] = offsets[3] + uhat_space->TrueVSize();
+
+		  offsets_test[0] = 0;
+		  offsets_test[1] = vtest_space->TrueVSize();
+		  offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+
+		  /*******************************************************/
+		  /* 15c. update essential degree of freedoms			 */
+		  /*******************************************************/
+		  uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
+		  /****************************************************/
+		  /* 15d. update the block vectors and grid functions */
+		  /****************************************************/
 		  x.Update(offsets);
-		  b.Update(offsets);
 		  x = 0.;
+		  F.Update(offsets_test);
+		  F = 0.;
+		  
 		  uhat.Update();
+		  uhat = 0.;
 		  uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
-		  uhat.ProjectCoefficientSkeletonDG(u_coeff); /* deal with boundary conditions */
+		  uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
 		  u0.Update();
 		  q0.Update();
+		  /*****************************************************/
+		  /* 15e. update linear form						   */
+		  /*****************************************************/
+		  linear_source_operator->Update();
+		  linear_source_operator->Assemble();
 
-		  /* 15c. update the reduced_system_operator */
-		  reduced_system_operator->UpdateOperators(uhat);
+		  /****************************************************/
+		  /* 15f. Update Bilinaer Forms                       */
+		  /****************************************************/
+		  B_mass_q->Update();
+		  B_mass_q->Assemble();
+   		  B_mass_q->Finalize();
+
+		  B_u_dot_div->Update();
+		  B_u_dot_div->Assemble();
+		  B_u_dot_div->Finalize();
+		  B_u_dot_div->SpMat() *= -1.;
+
+		  B_u_normal_jump->Update();
+		  B_u_normal_jump->Assemble();
+		  B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
+		  B_u_normal_jump->Finalize();
+
+		  /* set boundary condition for block vector */
 		  uhat.GetTrueDofs(x.GetBlock(uhat_var) );
-		  /* 15d. update the linear solver in the reduced_system_operator */
-		  /* update the preconditioner */
+
+		  B_q_weak_div->Update();
+		  B_q_weak_div->Assemble();
+   		  B_q_weak_div->Finalize();
+
+		  B_q_jump->Update();
+		  B_q_jump->Assemble();
+   		  B_q_jump->Finalize();
+
+		  Vinv->Update();
+		  Vinv->Assemble();
+		  Vinv->Finalize();
+
+		  Sinv->Update();
+		  Sinv->Assemble();
+		  Sinv->Finalize();
+
+		  /***************************************************/
+		  /* 15g. Update HypreParMatrices					 */
+		  /***************************************************/
+		   matB_mass_q = B_mass_q->ParallelAssemble();
+   		   matB_u_dot_div = B_u_dot_div->ParallelAssemble();
+   		   matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
+   		   matB_q_weak_div = B_q_weak_div->ParallelAssemble();
+   		   matB_q_jump = B_q_jump->ParallelAssemble();
+
+           matVinv = Vinv->ParallelAssemble();
+           matSinv = Sinv->ParallelAssemble();
+
+		   /*************************************************/
+		   /* 15h. Update Block Operators				    */
+		   /*************************************************/
+		   delete B;
+		   delete Jac;
+		   delete InverseGram;
+
+		   B = new BlockOperator (offsets_test, offsets);
+	  	   
+	  	   B->SetBlock(0, q0_var  ,matB_mass_q);
+	  	   B->SetBlock(0, u0_var  ,matB_u_dot_div);
+	  	   B->SetBlock(0, uhat_var,matB_u_normal_jump);
+	  	   
+	  	   B->SetBlock(1, q0_var   ,matB_q_weak_div);
+	  	   B->SetBlock(1, qhat_var ,matB_q_jump);
+
+		   /*************************************/
+		   Jac = new BlockOperator(offsets_test,offsets);
+	  	   
+	  	   Jac->SetBlock(0, q0_var  ,matB_mass_q);
+	  	   Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
+	  	   Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
+	  	   
+	  	   Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
+	  	   Jac->SetBlock(1, qhat_var ,matB_q_jump);
+		   /*************************************/
+	       InverseGram = new BlockOperator(offsets_test, offsets_test);
+	       InverseGram->SetBlock(0,0,matVinv);
+	       InverseGram->SetBlock(1,1,matSinv);
+		   
+		   /**********************************************/
+		   /* 15i. Update Block Jacobian Preconditioners */
+		   /**********************************************/
+		   S0->Update();	
+		   S0->Assemble();
+		   S0->Finalize();
+		   matS0 = S0->ParallelAssemble();
+
+           matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+		   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
+
+           matVhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
+
+	       if(!perturb){
+	 	       matShat = RAP(matVinv,matB_u_normal_jump);
+ 	       }
+ 	       else{
+ 	   	     amg_perturbation = min(1e-3, amg_perturbation);
+ 	   	     cout<<amg_perturbation<<endl;
+		     delete Sjump;
+ 	   	     Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+ 	       	 Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+ 	       	 Sjump->Assemble();
+ 	       	 Sjump->Finalize();
+ 	       	 Sjump->SpMat() *= amg_perturbation;
+ 	       	 Sjump->SpMat() += B_u_normal_jump->SpMat();
+ 	       	 matSjump=Sjump->ParallelAssemble(); 
+ 	         matShat = RAP(matSjump, matVinv, matSjump);
+ 	       }
+
+		   /**********************************************/
+		   /* 15g. Update Block Jacobian Preconditioners */
+		   /**********************************************/
+		   delete reduced_system_operator;
        } /* end of AMR loop */
 
 //   // 16. Free the used memory.
-	/* reduced system operator */
-   delete reduced_system_operator;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
