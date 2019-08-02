@@ -15,7 +15,38 @@ double r_exact(const Vector & x){
 }
 void  zero_fun(const Vector & x, Vector & f);
 
+void AMRUpdateFEMSpaceAndBlockStructure( 
+		ParFiniteElementSpace * q0_space,
+		ParFiniteElementSpace * u0_space,
+		ParFiniteElementSpace * qhat_space,
+		ParFiniteElementSpace * uhat_space,
+		ParFiniteElementSpace * vtest_space,
+		ParFiniteElementSpace * stest_space,
+		Array<int> & offsets,
+		Array<int> & offsets_test);
 
+void AMRUpdateOperators(
+		ParLinearForm *linear_source_operator,
+		ParMixedBilinearForm *B_mass_q,
+		ParMixedBilinearForm *B_u_dot_div,
+		ParMixedBilinearForm *B_u_normal_jump,
+		ParMixedBilinearForm *B_q_weak_div,
+		ParMixedBilinearForm *B_q_jump,
+		ParBilinearForm * Vinv,
+		ParBilinearForm * Sinv,
+		Array<int> ess_trace_vdof_list,
+		ParGridFunction uhat,
+		Vector *F_bc_block
+		);
+
+void AMRUpdateHypreMatrices( 
+		HypreParMatrix * matB_mass_q,
+		HypreParMatrix * matB_u_dot_div,
+		HypreParMatrix * matB_u_normal_jmp,
+		HypreParMatrix * matB_q_weak_div,
+		HypreParMatrix * matB_q_jump,
+		HypreParMatrix * matVinv,
+		HypreParMatrix * matSinv);
 
 int main(int argc, char *argv[])
 {
@@ -846,26 +877,30 @@ int main(int argc, char *argv[])
 		  /****************************************/
 		  /* 15a. update the finite element space */
 		  /****************************************/
-		  q0_space->Update();
-		  u0_space->Update();
-		  qhat_space->Update(false);
-		  uhat_space->Update(false);
+		 // q0_space->Update();
+		 // u0_space->Update();
+		 // qhat_space->Update(false);
+		 // uhat_space->Update(false);
 
-		  vtest_space->Update();
-		  stest_space->Update();
+		 // vtest_space->Update();
+		 // stest_space->Update();
 
-		  /*******************************************************/
-		  /* 15b. update the block structures					 */
-		  /*******************************************************/
-		  offsets[0] = 0;
-		  offsets[1] = q0_space->TrueVSize();
-		  offsets[2] = offsets[1] + u0_space->TrueVSize();
-		  offsets[3] = offsets[2] + qhat_space->TrueVSize();
-		  offsets[4] = offsets[3] + uhat_space->TrueVSize();
+		 // /*******************************************************/
+		 // /* 15b. update the block structures					 */
+		 // /*******************************************************/
+		 // offsets[0] = 0;
+		 // offsets[1] = q0_space->TrueVSize();
+		 // offsets[2] = offsets[1] + u0_space->TrueVSize();
+		 // offsets[3] = offsets[2] + qhat_space->TrueVSize();
+		 // offsets[4] = offsets[3] + uhat_space->TrueVSize();
 
-		  offsets_test[0] = 0;
-		  offsets_test[1] = vtest_space->TrueVSize();
-		  offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+		 // offsets_test[0] = 0;
+		 // offsets_test[1] = vtest_space->TrueVSize();
+		 // offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+		  AMRUpdateFEMSpaceAndBlockStructure( 
+				q0_space, u0_space, qhat_space, uhat_space,
+				vtest_space, stest_space,
+				offsets, offsets_test);
 
 		  /*******************************************************/
 		  /* 15c. update essential degree of freedoms			 */
@@ -880,8 +915,6 @@ int main(int argc, char *argv[])
 		  F = 0.;
 		  
 		  uhat.Update();
-		  uhat = 0.;
-		  uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
 		  uhat.ProjectCoefficientSkeletonDG(u_coeff);
 
 		  u0.Update();
@@ -889,44 +922,51 @@ int main(int argc, char *argv[])
 		  /*****************************************************/
 		  /* 15e. update linear form						   */
 		  /*****************************************************/
-		  linear_source_operator->Update();
-		  linear_source_operator->Assemble();
+//		  linear_source_operator->Update();
+//		  linear_source_operator->Assemble();
 
-		  /****************************************************/
-		  /* 15f. Update Bilinaer Forms                       */
-		  /****************************************************/
-		  B_mass_q->Update();
-		  B_mass_q->Assemble();
-   		  B_mass_q->Finalize();
+  	  /****************************************************/
+  	  /* 15f. Update Bilinaer Forms                       */
+  	  /****************************************************/
+//		  B_mass_q->Update();
+//		  B_mass_q->Assemble();
+//   		  B_mass_q->Finalize();
 
-		  B_u_dot_div->Update();
-		  B_u_dot_div->Assemble();
-		  B_u_dot_div->Finalize();
-		  B_u_dot_div->SpMat() *= -1.;
+//		  B_u_dot_div->Update();
+//		  B_u_dot_div->Assemble();
+//		  B_u_dot_div->Finalize();
+//		  B_u_dot_div->SpMat() *= -1.;
 
-		  B_u_normal_jump->Update();
-		  B_u_normal_jump->Assemble();
-		  B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
-		  B_u_normal_jump->Finalize();
+//		  B_u_normal_jump->Update();
+//		  B_u_normal_jump->Assemble();
+//		  B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
+//		  B_u_normal_jump->Finalize();
 
-		  /* set boundary condition for block vector */
-		  uhat.GetTrueDofs(x.GetBlock(uhat_var) );
 
-		  B_q_weak_div->Update();
-		  B_q_weak_div->Assemble();
-   		  B_q_weak_div->Finalize();
-
-		  B_q_jump->Update();
-		  B_q_jump->Assemble();
-   		  B_q_jump->Finalize();
-
-		  Vinv->Update();
-		  Vinv->Assemble();
-		  Vinv->Finalize();
-
-		  Sinv->Update();
-		  Sinv->Assemble();
-		  Sinv->Finalize();
+//		  B_q_weak_div->Update();
+//		  B_q_weak_div->Assemble();
+//   		  B_q_weak_div->Finalize();
+//
+//		  B_q_jump->Update();
+//		  B_q_jump->Assemble();
+//   		  B_q_jump->Finalize();
+//
+//		  Vinv->Update();
+//		  Vinv->Assemble();
+//		  Vinv->Finalize();
+//
+//		  Sinv->Update();
+//		  Sinv->Assemble();
+//		  Sinv->Finalize();
+		  
+	       AMRUpdateOperators( linear_source_operator, /* linear forms */
+						B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
+						Vinv,Sinv, /* bilinear forms */
+						ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
+		  /***************************************************/
+		  /* 15g. Set boundary conditions for block vectors	 */
+		  /***************************************************/
+		   uhat.GetTrueDofs(x.GetBlock(uhat_var) );
 
 		  /***************************************************/
 		  /* 15g. Update HypreParMatrices					 */
@@ -1057,4 +1097,93 @@ int main(int argc, char *argv[])
 void zero_fun(const Vector & x, Vector & f){
 	f = 0.;
 }
+
+void AMRUpdateFEMSpaceAndBlockStructure( 
+		ParFiniteElementSpace * q0_space,
+		ParFiniteElementSpace * u0_space,
+		ParFiniteElementSpace * qhat_space,
+		ParFiniteElementSpace * uhat_space,
+		ParFiniteElementSpace * vtest_space,
+		ParFiniteElementSpace * stest_space,
+		Array<int> & offsets,
+		Array<int> & offsets_test)
+{
+	/****************************************
+	* 1. update the finite element space
+	****************************************/
+	q0_space->Update();
+	u0_space->Update();
+	qhat_space->Update(false);
+	uhat_space->Update(false);
+	
+	vtest_space->Update();
+	stest_space->Update();
+	/*******************************************************
+	* 2. update the block structures					 
+	*******************************************************/
+	offsets[0] = 0;
+	offsets[1] = q0_space->TrueVSize();
+	offsets[2] = offsets[1] + u0_space->TrueVSize();
+	offsets[3] = offsets[2] + qhat_space->TrueVSize();
+	offsets[4] = offsets[3] + uhat_space->TrueVSize();
+	
+	offsets_test[0] = 0;
+	offsets_test[1] = vtest_space->TrueVSize();
+	offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+}
+
+
+void AMRUpdateOperators(
+		ParLinearForm *linear_source_operator,
+		ParMixedBilinearForm *B_mass_q,
+		ParMixedBilinearForm *B_u_dot_div,
+		ParMixedBilinearForm *B_u_normal_jump,
+		ParMixedBilinearForm *B_q_weak_div,
+		ParMixedBilinearForm *B_q_jump,
+		ParBilinearForm * Vinv,
+		ParBilinearForm * Sinv,
+		Array<int> ess_trace_vdof_list,
+		ParGridFunction uhat,
+		Vector *F_bc_block
+		)
+{
+	/* 1 update linera form */
+	linear_source_operator->Update();
+	linear_source_operator->Assemble();
+	/* 2 update bilinear forms */
+	B_mass_q->Update();
+	B_mass_q->Assemble();
+	B_mass_q->Finalize();
+	
+	B_u_dot_div->Update();
+	B_u_dot_div->Assemble();
+	B_u_dot_div->Finalize();
+	B_u_dot_div->SpMat() *= -1.;
+	
+	B_u_normal_jump->Update();
+	B_u_normal_jump->Assemble();
+	/* deal with boundary conditions */
+	B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, *F_bc_block );
+	B_u_normal_jump->Finalize();
+	
+	B_q_weak_div->Update();
+	B_q_weak_div->Assemble();
+	B_q_weak_div->Finalize();
+	
+	B_q_jump->Update();
+	B_q_jump->Assemble();
+	B_q_jump->Finalize();
+	
+	Vinv->Update();
+	Vinv->Assemble();
+	Vinv->Finalize();
+	
+	Sinv->Update();
+	Sinv->Assemble();
+	Sinv->Finalize();
+
+}
+
+
+
 
