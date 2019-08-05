@@ -40,9 +40,30 @@ void AMRUpdateOperators(
 		);
 
 void AMRUpdateHypreMatrices( 
+		ParMixedBilinearForm *B_mass_q,
+		ParMixedBilinearForm *B_u_dot_div,
+		ParMixedBilinearForm *B_u_normal_jump,
+		ParMixedBilinearForm *B_q_weak_div,
+		ParMixedBilinearForm *B_q_jump,
+		ParBilinearForm * Vinv,
+		ParBilinearForm * Sinv,
+		HypreParMatrix * &matB_mass_q,
+		HypreParMatrix * &matB_u_dot_div,
+		HypreParMatrix * &matB_u_normal_jump,
+		HypreParMatrix * &matB_q_weak_div,
+		HypreParMatrix * &matB_q_jump,
+		HypreParMatrix * &matVinv,
+		HypreParMatrix * &matSinv);
+
+void AMRUpdateBlockOperators(
+		Array<int> offsets_test,
+		Array<int> offsets,
+		BlockOperator *  B,
+		BlockOperator * Jac,
+		BlockOperator * InverseGram,
 		HypreParMatrix * matB_mass_q,
 		HypreParMatrix * matB_u_dot_div,
-		HypreParMatrix * matB_u_normal_jmp,
+		HypreParMatrix * matB_u_normal_jump,
 		HypreParMatrix * matB_q_weak_div,
 		HypreParMatrix * matB_q_jump,
 		HypreParMatrix * matVinv,
@@ -735,6 +756,7 @@ int main(int argc, char *argv[])
        		* AMR (Adaptive Mesh Refinement)
        		* **********************************************/
        	   {
+			  cout<<offsets[4]<<" "<<x.Size()<<endl;
        		  linear_source_operator->ParallelAssemble( F.GetBlock(1) );
        
        	      BlockVector LSres( offsets_test ), tmp( offsets_test );
@@ -874,40 +896,24 @@ int main(int argc, char *argv[])
 		  * and matrices,
 		  * update is defined in FixedPointReducedSystemOperator
 		  **********************************************************************/
-		  /****************************************/
-		  /* 15a. update the finite element space */
-		  /****************************************/
-		 // q0_space->Update();
-		 // u0_space->Update();
-		 // qhat_space->Update(false);
-		 // uhat_space->Update(false);
-
-		 // vtest_space->Update();
-		 // stest_space->Update();
-
-		 // /*******************************************************/
-		 // /* 15b. update the block structures					 */
-		 // /*******************************************************/
-		 // offsets[0] = 0;
-		 // offsets[1] = q0_space->TrueVSize();
-		 // offsets[2] = offsets[1] + u0_space->TrueVSize();
-		 // offsets[3] = offsets[2] + qhat_space->TrueVSize();
-		 // offsets[4] = offsets[3] + uhat_space->TrueVSize();
-
-		 // offsets_test[0] = 0;
-		 // offsets_test[1] = vtest_space->TrueVSize();
-		 // offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
+		  /**********************************************
+		   * 15a. update the (i) finite element spaces 
+		   *				 (ii) block structures 	
+		   ***********************************************/
 		  AMRUpdateFEMSpaceAndBlockStructure( 
+				/* finite element spaces */
 				q0_space, u0_space, qhat_space, uhat_space,
 				vtest_space, stest_space,
+				/* block structures */
 				offsets, offsets_test);
 
-		  /*******************************************************/
-		  /* 15c. update essential degree of freedoms			 */
-		  /*******************************************************/
+		  /*****************************************************************
+		   * 15b. update essential degree of freedoms for the boundary
+		   * conditions 
+		   ****************************************************************/
 		  uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
 		  /****************************************************/
-		  /* 15d. update the block vectors and grid functions */
+		  /* 15c. update the block vectors and grid functions */
 		  /****************************************************/
 		  x.Update(offsets);
 		  x = 0.;
@@ -919,96 +925,46 @@ int main(int argc, char *argv[])
 
 		  u0.Update();
 		  q0.Update();
-		  /*****************************************************/
-		  /* 15e. update linear form						   */
-		  /*****************************************************/
-//		  linear_source_operator->Update();
-//		  linear_source_operator->Assemble();
-
-  	  /****************************************************/
-  	  /* 15f. Update Bilinaer Forms                       */
-  	  /****************************************************/
-//		  B_mass_q->Update();
-//		  B_mass_q->Assemble();
-//   		  B_mass_q->Finalize();
-
-//		  B_u_dot_div->Update();
-//		  B_u_dot_div->Assemble();
-//		  B_u_dot_div->Finalize();
-//		  B_u_dot_div->SpMat() *= -1.;
-
-//		  B_u_normal_jump->Update();
-//		  B_u_normal_jump->Assemble();
-//		  B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
-//		  B_u_normal_jump->Finalize();
-
-
-//		  B_q_weak_div->Update();
-//		  B_q_weak_div->Assemble();
-//   		  B_q_weak_div->Finalize();
-//
-//		  B_q_jump->Update();
-//		  B_q_jump->Assemble();
-//   		  B_q_jump->Finalize();
-//
-//		  Vinv->Update();
-//		  Vinv->Assemble();
-//		  Vinv->Finalize();
-//
-//		  Sinv->Update();
-//		  Sinv->Assemble();
-//		  Sinv->Finalize();
-		  
-	       AMRUpdateOperators( linear_source_operator, /* linear forms */
+		  /************************************************************
+		   * 15d. update linear and bilinear forms
+		   * **********************************************************/
+	      AMRUpdateOperators( linear_source_operator, /* linear forms */
 						B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
 						Vinv,Sinv, /* bilinear forms */
 						ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
 		  /***************************************************/
-		  /* 15g. Set boundary conditions for block vectors	 */
+		  /* 15e. Set boundary conditions for block vectors	 */
 		  /***************************************************/
 		   uhat.GetTrueDofs(x.GetBlock(uhat_var) );
 
 		  /***************************************************/
 		  /* 15g. Update HypreParMatrices					 */
 		  /***************************************************/
-		   matB_mass_q = B_mass_q->ParallelAssemble();
-   		   matB_u_dot_div = B_u_dot_div->ParallelAssemble();
-   		   matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
-   		   matB_q_weak_div = B_q_weak_div->ParallelAssemble();
-   		   matB_q_jump = B_q_jump->ParallelAssemble();
-
-           matVinv = Vinv->ParallelAssemble();
-           matSinv = Sinv->ParallelAssemble();
+		   AMRUpdateHypreMatrices(/* related bilinear forms */ 
+								B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
+		   						Vinv, Sinv,
+								/* matrices */
+		   						matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+		   						matVinv, matSinv);
 
 		   /*************************************************/
 		   /* 15h. Update Block Operators				    */
 		   /*************************************************/
+		   /* 15h1. resize the operator */
 		   delete B;
 		   delete Jac;
 		   delete InverseGram;
 
 		   B = new BlockOperator (offsets_test, offsets);
-	  	   
-	  	   B->SetBlock(0, q0_var  ,matB_mass_q);
-	  	   B->SetBlock(0, u0_var  ,matB_u_dot_div);
-	  	   B->SetBlock(0, uhat_var,matB_u_normal_jump);
-	  	   
-	  	   B->SetBlock(1, q0_var   ,matB_q_weak_div);
-	  	   B->SetBlock(1, qhat_var ,matB_q_jump);
-
-		   /*************************************/
 		   Jac = new BlockOperator(offsets_test,offsets);
-	  	   
-	  	   Jac->SetBlock(0, q0_var  ,matB_mass_q);
-	  	   Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
-	  	   Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
-	  	   
-	  	   Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
-	  	   Jac->SetBlock(1, qhat_var ,matB_q_jump);
-		   /*************************************/
 	       InverseGram = new BlockOperator(offsets_test, offsets_test);
-	       InverseGram->SetBlock(0,0,matVinv);
-	       InverseGram->SetBlock(1,1,matSinv);
+
+		   /* 15h2. assemble the block operators */
+           AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
+							B, Jac, InverseGram, /* block operators */
+							/* matrices to set small blocks */
+							matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+							matVinv, matSinv);
 		   
 		   /**********************************************/
 		   /* 15i. Update Block Jacobian Preconditioners */
@@ -1186,4 +1142,81 @@ void AMRUpdateOperators(
 
 
 
+void AMRUpdateHypreMatrices( 
+		ParMixedBilinearForm *B_mass_q,
+		ParMixedBilinearForm *B_u_dot_div,
+		ParMixedBilinearForm *B_u_normal_jump,
+		ParMixedBilinearForm *B_q_weak_div,
+		ParMixedBilinearForm *B_q_jump,
+		ParBilinearForm * Vinv,
+		ParBilinearForm * Sinv,
+		HypreParMatrix * &matB_mass_q,
+		HypreParMatrix * &matB_u_dot_div,
+		HypreParMatrix * &matB_u_normal_jump,
+		HypreParMatrix * &matB_q_weak_div,
+		HypreParMatrix * &matB_q_jump,
+		HypreParMatrix * &matVinv,
+		HypreParMatrix * &matSinv)
+{
+//	delete matB_mass_q;
+//	delete matB_u_dot_div;
+//	delete matB_u_normal_jump;
+//	delete matB_q_weak_div;
+//	delete matB_q_jump;
+//
+//	delete matVinv;
+//	delete matSinv;
 
+	matB_mass_q = B_mass_q->ParallelAssemble();
+	matB_u_dot_div = B_u_dot_div->ParallelAssemble();
+	matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
+	matB_q_weak_div = B_q_weak_div->ParallelAssemble();
+	matB_q_jump = B_q_jump->ParallelAssemble();
+	
+	matVinv = Vinv->ParallelAssemble();
+	matSinv = Sinv->ParallelAssemble();
+}
+
+void AMRUpdateBlockOperators(
+		Array<int> offsets_test,
+		Array<int> offsets,
+		BlockOperator *  B,
+		BlockOperator * Jac,
+		BlockOperator * InverseGram,
+		HypreParMatrix * matB_mass_q,
+		HypreParMatrix * matB_u_dot_div,
+		HypreParMatrix * matB_u_normal_jump,
+		HypreParMatrix * matB_q_weak_div,
+		HypreParMatrix * matB_q_jump,
+		HypreParMatrix * matVinv,
+		HypreParMatrix * matSinv)
+{
+//	delete B;
+//	delete Jac;
+//	delete InverseGram;
+
+   enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
+	
+//	B = new BlockOperator (offsets_test, offsets);
+
+	B->SetBlock(0, q0_var  ,matB_mass_q);
+	B->SetBlock(0, u0_var  ,matB_u_dot_div);
+	B->SetBlock(0, uhat_var,matB_u_normal_jump);
+	
+	B->SetBlock(1, q0_var   ,matB_q_weak_div);
+	B->SetBlock(1, qhat_var ,matB_q_jump);
+	
+	/*************************************/
+//	Jac = new BlockOperator(offsets_test,offsets);
+	
+	Jac->SetBlock(0, q0_var  ,matB_mass_q);
+	Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
+	Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
+	
+	Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
+	Jac->SetBlock(1, qhat_var ,matB_q_jump);
+	/*************************************/
+//	InverseGram = new BlockOperator(offsets_test, offsets_test);
+	InverseGram->SetBlock(0,0,matVinv);
+	InverseGram->SetBlock(1,1,matSinv);
+}

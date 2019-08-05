@@ -254,7 +254,7 @@ void FixedPointReducedSystemOperator::UpdateJac(const Vector &x) const
 {
 	/* calculate df(u)/du  */
 //	UpdateNDFDU(x);
-
+	
 	Jac->SetBlock(1,1,NDfDu );
 	
 }
@@ -315,6 +315,7 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	/****************************************************************************/
 	JTGinvB->Mult(x,y);
 
+
 	y = x; /* given initial guess for the KSP solve */
 	solver.Mult(rhs,y); /* calculate  -(J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
 	y += x;			/* y = x - (J^t G^-1 B)^-1*( J^t G^-1 F(x) ) */
@@ -323,6 +324,7 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 }
 
 FixedPointReducedSystemOperator::~FixedPointReducedSystemOperator(){
+	delete NDfDu;
 //	delete prec;
 //
 //	delete prec0;
