@@ -273,7 +273,7 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	PetscLinearSolver solver(MPI_COMM_WORLD);
 	solver.SetRelTol(petsc_linear_solver_rel_tol);
 	solver.SetPrintLevel(0);
-	solver.SetMaxIter(300);
+	solver.SetMaxIter(4000);
 	solver.SetPreconditioner(P);
 //	solver.iterative_mode = true; /* turn on the interative mode to take initial guess */
 

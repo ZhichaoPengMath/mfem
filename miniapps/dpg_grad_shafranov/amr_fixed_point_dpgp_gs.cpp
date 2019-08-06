@@ -15,18 +15,36 @@ double r_exact(const Vector & x){
 }
 void  zero_fun(const Vector & x, Vector & f);
 
+/****************************************************
+ * Error estimator for adaptive mesh refinement
+ * **************************************************/
+void ElementErrorEstimate( FiniteElementSpace * fes,
+						   GridFunction estimator,
+						   GridFunction residual,
+						   GridFunction &result);
+
+/***********************************************
+ * Subroutines to update finite element spaces
+ * operators, matrices, after mesh refinement
+ ***********************************************/
+/* Update finite element spaces and block structure */
 void AMRUpdateFEMSpaceAndBlockStructure( 
+		/* finite element spaces */
 		ParFiniteElementSpace * q0_space,
 		ParFiniteElementSpace * u0_space,
 		ParFiniteElementSpace * qhat_space,
 		ParFiniteElementSpace * uhat_space,
 		ParFiniteElementSpace * vtest_space,
 		ParFiniteElementSpace * stest_space,
+		/* block structures */
 		Array<int> & offsets,
 		Array<int> & offsets_test);
 
+/* update lienar and bilinear forms */
 void AMRUpdateOperators(
+		/* lienar form */
 		ParLinearForm *linear_source_operator,
+		/* bilienar forms */
 		ParMixedBilinearForm *B_mass_q,
 		ParMixedBilinearForm *B_u_dot_div,
 		ParMixedBilinearForm *B_u_normal_jump,
@@ -34,12 +52,15 @@ void AMRUpdateOperators(
 		ParMixedBilinearForm *B_q_jump,
 		ParBilinearForm * Vinv,
 		ParBilinearForm * Sinv,
+		/* terms related to boundary conditions */
 		Array<int> ess_trace_vdof_list,
 		ParGridFunction uhat,
 		Vector *F_bc_block
 		);
 
+/* update HypreMatrices */
 void AMRUpdateHypreMatrices( 
+		/* related bilienar forms */
 		ParMixedBilinearForm *B_mass_q,
 		ParMixedBilinearForm *B_u_dot_div,
 		ParMixedBilinearForm *B_u_normal_jump,
@@ -47,6 +68,7 @@ void AMRUpdateHypreMatrices(
 		ParMixedBilinearForm *B_q_jump,
 		ParBilinearForm * Vinv,
 		ParBilinearForm * Sinv,
+		/* HypreParMatrices */
 		HypreParMatrix * &matB_mass_q,
 		HypreParMatrix * &matB_u_dot_div,
 		HypreParMatrix * &matB_u_normal_jump,
@@ -55,12 +77,16 @@ void AMRUpdateHypreMatrices(
 		HypreParMatrix * &matVinv,
 		HypreParMatrix * &matSinv);
 
+/* update block operators */
 void AMRUpdateBlockOperators(
+		/* block structure */
 		Array<int> offsets_test,
 		Array<int> offsets,
+		/* block operators */
 		BlockOperator *  B,
 		BlockOperator * Jac,
 		BlockOperator * InverseGram,
+		/* matrices realted to subblocks */
 		HypreParMatrix * matB_mass_q,
 		HypreParMatrix * matB_u_dot_div,
 		HypreParMatrix * matB_u_normal_jump,
@@ -79,7 +105,6 @@ int main(int argc, char *argv[])
 
    const char * mesh_file;
    mesh_file = "../../data/cerfon_iter_quad.mesh";
-//   const char *mesh_file = "../data/inline-quad-pzc2.mesh";
    int order = 1;
    bool visualization = 1;
    bool q_visual = 1;
@@ -109,7 +134,15 @@ int main(int argc, char *argv[])
 
    /* AMR parameters */
    int amr_refine_level = 0;
+   /* max number of allowable hanging nodes */
+   int num_hanging_node_limit = 3;
+   /* thresholds for AMR */
+   double max_ref_threshold = 0.25;
+   double global_ref_threshold = 0.125;
+   double abs_ref_threshold = 1e-5;
+
    bool amr_tri_nonconforming = false;
+
 
    OptionsParser args(argc, argv);
 
@@ -182,28 +215,35 @@ int main(int argc, char *argv[])
    
    args.Parse();
    if(sol_opt == 1){
-		mesh_file = "../../data/cerfon_iter_quad.mesh";
+		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
    }
    else if(sol_opt == 2){
-		mesh_file = "../../data/cerfon_nstx_quad.mesh";
+		mesh_file = "../../data/tri_cerfon_nstx_quad.mesh";
    }
    else if(sol_opt == 3){
-		mesh_file = "../../data/ITER_double_null.mesh";
+		mesh_file = "../../data/tri_ITER_double_null.mesh";
    }
    else if(sol_opt == 4){
-		mesh_file = "../../data/cerfon_iter_quad.mesh";
+		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
    }
    else if(sol_opt == 5){
-		mesh_file = "../../data/cerfon_iter_quad.mesh";
+		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
    }
-   else{
-		mesh_file = "../../data/inline-quad-pzc2.mesh";
-   }
+
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
    /* AMR options */
    args.AddOption(&amr_refine_level, "-amr_level", "--amr_level",
                   "how many AMR refinement level");
+
+   args.AddOption(&max_ref_threshold, "-amr_max_tol", "--amr_max_tol",
+                  "relative threshold for adaptive mesh refinement");
+
+   args.AddOption(&global_ref_threshold, "-amr_global_tol", "--amr_global_tol",
+                  "relative threshold for adaptive mesh refinement");
+
+   args.AddOption(&abs_ref_threshold, "-amr_abs_tol", "--amr_abs_tol",
+                  "relative threshold for adaptive mesh refinement");
 
    args.AddOption(&amr_tri_nonconforming, "-tri_non", "--tri_non", "-tri_conf",
                   "--tri_conf",
@@ -226,6 +266,25 @@ int main(int argc, char *argv[])
 
    amr_refine_level = max(amr_refine_level,0); /* avoid negative amr_refine_level */
    
+   /* initialize plotting */
+   socketstream sol_sock;
+   socketstream q_sock;
+   socketstream q_error_sock;
+   char vishost[] = "localhost";
+   int  visport   = 19916;
+   if (visualization)
+   {
+      sol_sock.open(vishost, visport);
+      sol_sock.precision(8);
+	  if(q_visual){
+	      q_sock.open(vishost, visport);
+		  q_sock.precision(8);
+	  }
+	  if(q_vis_error){
+	      q_error_sock.open(vishost, visport);
+          q_error_sock.precision(8);
+	  }
+   }
 
    // 1b. We initialize PETSc
    if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
@@ -310,6 +369,9 @@ int main(int argc, char *argv[])
    ParFiniteElementSpace * vtest_space = new ParFiniteElementSpace(mesh, vtest_fec,dim);
    ParFiniteElementSpace * stest_space = new ParFiniteElementSpace(mesh, stest_fec);
    
+   /* piecewise constant finite element space */
+   FiniteElementCollection *piecewise_const_fec = new L2_FECollection(0,dim);
+   ParFiniteElementSpace *piecewise_const_space = new ParFiniteElementSpace(mesh, piecewise_const_fec);
 
    // 5. Define the block structure of the problem, by creating the offset
    //    variables. Also allocate two BlockVector objects to store the solution
@@ -610,6 +672,7 @@ int main(int argc, char *argv[])
       HypreParMatrix * matSjump = NULL;
       HypreParMatrix * matShat = NULL;
    
+	  PetscParMatrix * petsc_matShat = NULL;
       /* By default use petsc to define the AMG preconditioner for the
    	* third block Shat, and no need to perturb Shat.
    	* However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
@@ -617,10 +680,13 @@ int main(int argc, char *argv[])
 
 	  HypreParMatrix * matShat_tmp = NULL;
 	  HypreParMatrix * matB_u_normal_jump_Transpose = NULL;
+
       if(!perturb){
 		  matB_u_normal_jump_Transpose = matB_u_normal_jump->Transpose();
 	      matShat_tmp = ParMult(matVinv, matB_u_normal_jump);
 	      matShat = ParMult(matB_u_normal_jump_Transpose, matShat_tmp);
+
+		  petsc_matShat = new PetscParMatrix(matSinv->GetComm(), matShat, Operator::PETSC_MATAIJ);
 
 //		  matShat = RAP(matVinv,matB_u_normal_jump);
       }
@@ -656,6 +722,9 @@ int main(int argc, char *argv[])
 
        	   StopWatch timer;
 
+		   /**********************************************************************
+			* 12. Assemble the block Jacobian preconditioner for the current mesh
+			* ********************************************************************/
 	       BlockDiagonalPreconditioner prec(offsets);
 
 	       HypreBoomerAMG prec0( *matV0 );
@@ -673,7 +742,8 @@ int main(int argc, char *argv[])
 		   PetscLinearSolver prec3(MPI_COMM_WORLD);
 		   HypreBoomerAMG mfem_prec3;
 	       if( !perturb ){
-	           prec3.SetOperator(*matShat);
+	           prec3.SetOperator(*petsc_matShat);
+//	           prec3.SetOperator(*matShat);
 	       	   prec3.SetPrintLevel(0);
 //	       	   prec3->iterative_mode = true;
 
@@ -750,46 +820,7 @@ int main(int argc, char *argv[])
        			cout<<"time: "<<timer.RealTime()<<endl;
        	   }
        
-       	   /************************************************
-       		* Calculate the residual in the dual norm,
-       		* which can be used as an error estimator for 
-       		* AMR (Adaptive Mesh Refinement)
-       		* **********************************************/
-       	   {
-			  cout<<offsets[4]<<" "<<x.Size()<<endl;
-       		  linear_source_operator->ParallelAssemble( F.GetBlock(1) );
-       
-       	      BlockVector LSres( offsets_test ), tmp( offsets_test );
-       	      B->Mult(x, LSres);
-       
-       		  /* Bx - linear source */
-       	      LSres -= F;
-       
-       		  /* Bx - nonlinear source */
-       		  F = 0.;
-       		  Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
-       		  ParGridFunction u0_now;
-       		  Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
-           	  u0_now.MakeTRef(u0_space, u0_vec, 0);
-       		  u0_now.SetFromTrueVector();
-           	  FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
-       
-       		  ParLinearForm *fu_mass = new ParLinearForm( stest_space );
-       		  fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
-       		  fu_mass->Assemble();
-       
-       		  fu_mass->ParallelAssemble(F1);
-       		  LSres -= F;
-       
-       		  /* calculate the dual norm */
-       	      InverseGram->Mult(LSres, tmp);
-       		  double res = sqrt(InnerProduct(LSres,tmp) );
-       		  if(myid == 0){
-       			printf("\n|| Bx - F ||_{S^-1} = %e \n",res);
-       		  }
-       	   }
-       
-//       	// 12. error 
+       	// 13. error 
        	   u0.Distribute( x.GetBlock(u0_var) );
        	   q0.Distribute( x.GetBlock(q0_var) );
        
@@ -812,7 +843,7 @@ int main(int argc, char *argv[])
        	   }
        
        	
-       	// 13. Visualization
+       	// 14. Visualization
        	//	   Save the refined mesh and the solution. This output can be viewed
        	//     later using GLVis: "glvis -m refined.mesh -g sol.gf".
        	   ParGridFunction * q_projection_minus_num = NULL; 
@@ -824,8 +855,8 @@ int main(int argc, char *argv[])
        
        	   {
        	      ostringstream mesh_name, sol_name;
-                 mesh_name << "mesh." << setfill('0') << setw(6) << myid;
-                 sol_name << "sol." << setfill('0') << setw(6) << myid;
+              mesh_name << "mesh." << setfill('0') << setw(6) << myid;
+              sol_name << "sol." << setfill('0') << setw(6) << myid;
        
        	      ofstream mesh_ofs(mesh_name.str().c_str() );
        	      mesh_ofs.precision(8);
@@ -851,53 +882,139 @@ int main(int argc, char *argv[])
        		  }
        	   }
        	  
-       	   // 13b. Send the solution by socket to a GLVis server.
+       	   // 14b. Send the solution by socket to a GLVis server.
        	   if (visualization)
        	   {
-       	      char vishost[] = "localhost";
-       	      int  visport   = 19916;
-       	      socketstream sol_sock(vishost, visport);
        		  sol_sock << "parallel " << num_procs << " " << myid << "\n";
-             	  sol_sock.precision(8);
-             	  sol_sock << "solution\n" << *mesh <<  u0 << "window_title 'U' "<<endl;
+              sol_sock << "solution\n" << *mesh <<  u0 << "window_title 'U' "<<endl;
        	
        		  if(q_visual){
-       	         socketstream q_sock(vishost, visport);
        			 q_sock << "parallel " << num_procs << " " << myid << "\n";
-             	  	 q_sock.precision(8);
-             	  	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
+             	 q_sock << "solution\n" << *mesh <<  q0 << "window_title 'Q' "<<endl;
        		  }
        		  /* plot error picture for q */
        		  if(q_vis_error){
-       	         socketstream q_error_sock(vishost, visport);
        			 q_error_sock << "parallel " << num_procs << " " << myid << "\n";
-             	  	 q_error_sock.precision(8);
-             	  	 q_error_sock << "solution\n" << *mesh <<  *q_projection_minus_num << "window_title 'Q_error' "<<endl;
+				 q_error_sock << "solution\n" << *mesh <<  *q_projection_minus_num << "window_title 'Q_error' "<<endl;
        		  }
        	   }
        	   delete q_projection_minus_num;
 
-          // 14. Obtain the error estimator and refine the mesh
-		  // 14a. Error estimator
-		  // 14b. Refine the mesh
+
+		  /*************************************************************************
+		   * 15. Adaptive mesh refinement
+		   * ***********************************************************************/
+
+		  /*********************************************************************
+		   * 15a. Error estimator, which is the residual in the dual norm
+		   * *******************************************************************/
+		  /* 15a1. calculate the estimator and residual vector for DPG */
+          linear_source_operator->ParallelAssemble( F.GetBlock(1) );
+          
+		  /* allocate memory */
+          BlockVector BlockEstimator( offsets_test ), BlockResidual( offsets_test );
+		  /* get Bx */
+          B->Mult(x, BlockEstimator);
+          
+          /* Bx - linear source */
+          BlockEstimator -= F;
+          
+          /* Bx - nonlinear source */
+          F = 0.;
+          Vector F1(F.GetData() + offsets_test[1],offsets_test[2]-offsets_test[1]);
+          ParGridFunction u0_now;
+          Vector u0_vec(x.GetData() + offsets[1], offsets[2] - offsets[1]);
+          u0_now.MakeTRef(u0_space, u0_vec, 0);
+          u0_now.SetFromTrueVector();
+          FUXCoefficient fu_coefficient( &u0_now, &nonlinear_source );
+          
+          ParLinearForm *fu_mass = new ParLinearForm( stest_space );
+          fu_mass->AddDomainIntegrator( new DomainLFIntegrator(fu_coefficient)  );
+          fu_mass->Assemble();
+          
+          fu_mass->ParallelAssemble(F1);
+          BlockEstimator -= F;
+          
+		  /* calculate residual */ 
+          InverseGram->Mult(BlockEstimator, BlockResidual);
+
+          double res = sqrt(InnerProduct(BlockEstimator,BlockResidual) );
+		  /* subblocks */
+		  ParGridFunction UEstimator(vtest_space);
+		  UEstimator.SetFromTrueDofs( BlockEstimator.GetBlock(0) );
+		  ParGridFunction UResidual(vtest_space);
+		  UResidual.SetFromTrueDofs( BlockResidual.GetBlock(0) );
+
+		  ParGridFunction QEstimator(stest_space);
+		  QEstimator.SetFromTrueDofs( BlockEstimator.GetBlock(1) );
+		  ParGridFunction QResidual(stest_space);
+		  QResidual.SetFromTrueDofs( BlockResidual.GetBlock(1) );
+
+		  ParGridFunction local_u_estimator(piecewise_const_space);
+		  ParGridFunction local_q_estimator(piecewise_const_space);
+
+
+		  ElementErrorEstimate( vtest_space, UEstimator, UResidual, local_u_estimator);
+		  ElementErrorEstimate( stest_space, QEstimator, QResidual, local_q_estimator);
+
+		  if(myid == 0){
+				printf("|| Bx - F ||_{G^-1} || = %e \n ",res);
+		  }
+
 		  if(amr_iter>=amr_refine_level){
-//			  break; /* stop the AMR iteration */
-			  mesh->UniformRefinement();
+			break;
+		  }
+		  /*********************************************************************
+		   * 15b. coloring the element needs to be refined
+		   * *******************************************************************/
+		  Array<int> refine_color;
+
+		  double rank_max_q_error = local_q_estimator.Max(); /* max local error on current rank */
+		  double max_q_error = 0.; /* max local error */
+		  MPI_Allreduce(&rank_max_q_error,&max_q_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+
+		  double rank_sum_q_estimator = local_q_estimator.Norml1();
+		  double sum_q_estimator = 0.;
+		  MPI_Allreduce(&rank_sum_q_estimator,&sum_q_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
+
+		  for(int i=0; i <mesh->GetNE(); i++){
+		   if(  
+			   (  (local_q_estimator(i) > abs_ref_threshold)	
+			&& (  (local_q_estimator(i) > max_ref_threshold*max_q_error)
+			    &&(local_q_estimator(i) > global_ref_threshold*sum_q_estimator/sqrt(mesh->GetNE() ) ) 
+			   ) )
+			 ){
+				refine_color.Append(i);
+			} /* if */
+		  }/* loop over all elements */
+
+		  /* 15c. Refine the mesh if needed */
+		  int num_ref = mesh->ReduceInt(refine_color.Size() );
+		  if(myid==0){
+			 cout<<num_ref<<" elements needs to be refined "<<endl;	
+		  }
+		  if(num_ref>0){
+			  mesh->GeneralRefinement( refine_color, -1, num_hanging_node_limit );
 		  }
 		  else{
-				mesh->UniformRefinement();
+			 break;
 		  }
+
+		  /* output refinement information */
+		  int mesh_num = mesh->GetGlobalNE();
 		  if(myid == 0){
-		  	cout<<"Refinement "<<amr_iter<<" with "<<mesh->GetNE()<<" elements"<<endl;
+		  	cout<<"Refinement "<<amr_iter<<" with "<<mesh_num<<" elements"<<endl;
+			cout<<endl;
 		  }
 
 		  /**********************************************************************
-		  * 15. Update the finite element spaces, linear, bilinear forms
+		  * 16. Update the finite element spaces, linear, bilinear forms
 		  * and matrices,
 		  * update is defined in FixedPointReducedSystemOperator
 		  **********************************************************************/
 		  /**********************************************
-		   * 15a. update the (i) finite element spaces 
+		   * 16a. update the (i) finite element spaces 
 		   *				 (ii) block structures 	
 		   ***********************************************/
 		  AMRUpdateFEMSpaceAndBlockStructure( 
@@ -907,8 +1024,9 @@ int main(int argc, char *argv[])
 				/* block structures */
 				offsets, offsets_test);
 
+		  piecewise_const_space->Update();
 		  /*****************************************************************
-		   * 15b. update essential degree of freedoms for the boundary
+		   * 16b. update essential degree of freedoms for the boundary
 		   * conditions 
 		   ****************************************************************/
 		  uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
@@ -926,79 +1044,139 @@ int main(int argc, char *argv[])
 		  u0.Update();
 		  q0.Update();
 		  /************************************************************
-		   * 15d. update linear and bilinear forms
+		   * 16d. update linear and bilinear forms
 		   * **********************************************************/
 	      AMRUpdateOperators( linear_source_operator, /* linear forms */
 						B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
 						Vinv,Sinv, /* bilinear forms */
 						ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
 		  /***************************************************/
-		  /* 15e. Set boundary conditions for block vectors	 */
+		  /* 16e. Set boundary conditions for block vectors	 */
 		  /***************************************************/
-		   uhat.GetTrueDofs(x.GetBlock(uhat_var) );
+		  uhat.GetTrueDofs(x.GetBlock(uhat_var) );
 
 		  /***************************************************/
-		  /* 15g. Update HypreParMatrices					 */
+		  /* 16g. Update HypreParMatrices					 */
 		  /***************************************************/
-		   AMRUpdateHypreMatrices(/* related bilinear forms */ 
-								B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
-		   						Vinv, Sinv,
-								/* matrices */
-		   						matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
-		   						matVinv, matSinv);
+		  AMRUpdateHypreMatrices(/* related bilinear forms */ 
+		   					B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
+		  					Vinv, Sinv,
+		   					/* matrices */
+		  					matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+		  					matVinv, matSinv);
 
-		   /*************************************************/
-		   /* 15h. Update Block Operators				    */
-		   /*************************************************/
-		   /* 15h1. resize the operator */
-		   delete B;
-		   delete Jac;
-		   delete InverseGram;
+		  /*************************************************/
+		  /* 16h. Update Block Operators				    */
+		  /*************************************************/
+		  /* 16h1. resize the operator */
+		  delete B;
+		  delete Jac;
+		  delete InverseGram;
 
-		   B = new BlockOperator (offsets_test, offsets);
-		   Jac = new BlockOperator(offsets_test,offsets);
-	       InverseGram = new BlockOperator(offsets_test, offsets_test);
+		  B = new BlockOperator (offsets_test, offsets);
+		  Jac = new BlockOperator(offsets_test,offsets);
+	      InverseGram = new BlockOperator(offsets_test, offsets_test);
 
-		   /* 15h2. assemble the block operators */
-           AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
-							B, Jac, InverseGram, /* block operators */
-							/* matrices to set small blocks */
-							matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
-							matVinv, matSinv);
+		  /* 16h2. assemble the block operators */
+          //AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
+		  // 				B, Jac, InverseGram, /* block operators */
+		  // 				/* matrices to set small blocks */
+		  // 				matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+		  // 				matVinv, matSinv);
+	      /**************************************************
+		  * 17. load balancing
+		  * ************************************************/
+		  if(mesh->Nonconforming() ){
+		      mesh->Rebalance();
+		      /* FEM space and block structure */
+              AMRUpdateFEMSpaceAndBlockStructure( 
+						/* finite element spaces */
+              			q0_space, u0_space, qhat_space, uhat_space,
+              			vtest_space, stest_space,
+              			/* block structures */
+              			offsets, offsets_test);
+
+			 piecewise_const_space->Update();
+              
+		      /* locate essential dofs for boundary conditions */
+              uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
+		      /* update block vectors and grid functions */
+              x.Update(offsets);
+              x = 0.;
+              F.Update(offsets_test);
+              F = 0.;
+              
+              uhat.Update();
+              uhat.ProjectCoefficientSkeletonDG(u_coeff);
+              
+              u0.Update();
+		      /* linear and bilinear forms */
+              AMRUpdateOperators( linear_source_operator, /* linear forms */
+              			B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
+              			Vinv,Sinv, /* bilinear forms */
+              			ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
+		      /* set boundary conditions */
+              uhat.GetTrueDofs(x.GetBlock(uhat_var) );
+              
+		      /* update Hypre Matrices */
+              AMRUpdateHypreMatrices(/* related bilinear forms */ 
+              				B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
+              						Vinv, Sinv,
+              				/* matrices */
+              						matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+              						matVinv, matSinv);
+
+              /* Update block operators */
+               delete B;
+               delete Jac;
+               delete InverseGram;
+              
+               B = new BlockOperator (offsets_test, offsets);
+               Jac = new BlockOperator(offsets_test,offsets);
+               InverseGram = new BlockOperator(offsets_test, offsets_test);
+
+		  }/* end of load balancing */
+          AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
+           			B, Jac, InverseGram, /* block operators */
+           			/* matrices to set small blocks */
+           			matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+					matVinv, matSinv);
 		   
-		   /**********************************************/
-		   /* 15i. Update Block Jacobian Preconditioners */
-		   /**********************************************/
-		   S0->Update();	
-		   S0->Assemble();
-		   S0->Finalize();
-		   matS0 = S0->ParallelAssemble();
+		  /**********************************************/
+		  /* 18. Update Block Jacobian Preconditioners */
+		  /**********************************************/
+		  S0->Update();	
+		  S0->Assemble();
+		  S0->Finalize();
+		  matS0 = S0->ParallelAssemble();
 
-           matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
-		   matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
+          matV0  = RAP(matB_mass_q, matVinv, matB_mass_q);
+		  matV0->Add(1. , *RAP(matB_q_weak_div, matSinv, matB_q_weak_div) );
 
-           matVhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
+          matVhat   = RAP(matB_q_jump, matSinv, matB_q_jump);
 
-	       if(!perturb){
-	 	       matShat = RAP(matVinv,matB_u_normal_jump);
- 	       }
- 	       else{
- 	   	     amg_perturbation = min(1e-3, amg_perturbation);
- 	   	     cout<<amg_perturbation<<endl;
-		     delete Sjump;
- 	   	     Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
- 	       	 Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
- 	       	 Sjump->Assemble();
- 	       	 Sjump->Finalize();
- 	       	 Sjump->SpMat() *= amg_perturbation;
- 	       	 Sjump->SpMat() += B_u_normal_jump->SpMat();
- 	       	 matSjump=Sjump->ParallelAssemble(); 
- 	         matShat = RAP(matSjump, matVinv, matSjump);
- 	       }
+	      if(!perturb){
+	 	      matShat = RAP(matVinv,matB_u_normal_jump);
+		      delete petsc_matShat;
+		      petsc_matShat = new PetscParMatrix(matSinv->GetComm(), matShat, Operator::PETSC_MATAIJ);
+ 	      }
+ 	      else{
+ 	   	    amg_perturbation = min(1e-3, amg_perturbation);
+ 	   	    cout<<amg_perturbation<<endl;
+		    delete Sjump;
+ 	   	    Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+ 	      	 Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+ 	      	 Sjump->Assemble();
+ 	      	 Sjump->Finalize();
+ 	      	 Sjump->SpMat() *= amg_perturbation;
+ 	      	 Sjump->SpMat() += B_u_normal_jump->SpMat();
+ 	      	 matSjump=Sjump->ParallelAssemble(); 
+ 	        matShat = RAP(matSjump, matVinv, matSjump);
+ 	      }
 
-		   /**********************************************/
-		   /* 15g. Update Block Jacobian Preconditioners */
-		   /**********************************************/
+		  /************************************************
+		   * 18. Free the ReducedOperator for current mesh
+		   ************************************************/
 		   delete reduced_system_operator;
        } /* end of AMR loop */
 
@@ -1012,6 +1190,11 @@ int main(int argc, char *argv[])
    delete B_q_weak_div;
    delete B_q_jump;
    delete B_u_normal_jump;
+
+   delete S0;
+   if(perturb){
+       delete Sjump;
+   }
    /* matrix */
    delete matB_mass_q;
    delete matB_u_dot_div;
@@ -1054,6 +1237,12 @@ void zero_fun(const Vector & x, Vector & f){
 	f = 0.;
 }
 
+/*****************************************************
+ * Subroutines for updating finite element spaces,
+ * opeartors and matrices after adaptive mesh refinement
+ * ***************************************************/
+
+/* update finite element spaces and block strcture */
 void AMRUpdateFEMSpaceAndBlockStructure( 
 		ParFiniteElementSpace * q0_space,
 		ParFiniteElementSpace * u0_space,
@@ -1088,7 +1277,7 @@ void AMRUpdateFEMSpaceAndBlockStructure(
 	offsets_test[2] = offsets_test[1] + stest_space->TrueVSize();
 }
 
-
+/* update linear and bilinear forms */
 void AMRUpdateOperators(
 		ParLinearForm *linear_source_operator,
 		ParMixedBilinearForm *B_mass_q,
@@ -1140,8 +1329,7 @@ void AMRUpdateOperators(
 
 }
 
-
-
+/* update hypre matrices */
 void AMRUpdateHypreMatrices( 
 		ParMixedBilinearForm *B_mass_q,
 		ParMixedBilinearForm *B_u_dot_div,
@@ -1158,15 +1346,6 @@ void AMRUpdateHypreMatrices(
 		HypreParMatrix * &matVinv,
 		HypreParMatrix * &matSinv)
 {
-//	delete matB_mass_q;
-//	delete matB_u_dot_div;
-//	delete matB_u_normal_jump;
-//	delete matB_q_weak_div;
-//	delete matB_q_jump;
-//
-//	delete matVinv;
-//	delete matSinv;
-
 	matB_mass_q = B_mass_q->ParallelAssemble();
 	matB_u_dot_div = B_u_dot_div->ParallelAssemble();
 	matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
@@ -1177,6 +1356,7 @@ void AMRUpdateHypreMatrices(
 	matSinv = Sinv->ParallelAssemble();
 }
 
+/* update block operators */
 void AMRUpdateBlockOperators(
 		Array<int> offsets_test,
 		Array<int> offsets,
@@ -1191,13 +1371,7 @@ void AMRUpdateBlockOperators(
 		HypreParMatrix * matVinv,
 		HypreParMatrix * matSinv)
 {
-//	delete B;
-//	delete Jac;
-//	delete InverseGram;
-
    enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
-	
-//	B = new BlockOperator (offsets_test, offsets);
 
 	B->SetBlock(0, q0_var  ,matB_mass_q);
 	B->SetBlock(0, u0_var  ,matB_u_dot_div);
@@ -1207,8 +1381,6 @@ void AMRUpdateBlockOperators(
 	B->SetBlock(1, qhat_var ,matB_q_jump);
 	
 	/*************************************/
-//	Jac = new BlockOperator(offsets_test,offsets);
-	
 	Jac->SetBlock(0, q0_var  ,matB_mass_q);
 	Jac->SetBlock(0, u0_var  ,matB_u_dot_div);
 	Jac->SetBlock(0, uhat_var,matB_u_normal_jump);
@@ -1216,7 +1388,30 @@ void AMRUpdateBlockOperators(
 	Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
 	Jac->SetBlock(1, qhat_var ,matB_q_jump);
 	/*************************************/
-//	InverseGram = new BlockOperator(offsets_test, offsets_test);
 	InverseGram->SetBlock(0,0,matVinv);
 	InverseGram->SetBlock(1,1,matSinv);
 }
+
+/**************************************************
+ * Error estimator
+ * ************************************************/
+void ElementErrorEstimate( FiniteElementSpace * fes,
+						  GridFunction estimator,
+						  GridFunction residual,
+						  GridFunction &result)
+{
+	result = 0.;
+	const FiniteElement * fe;
+	Vector LocVec1,LocVec2;
+	
+	for(int i=0; i<fes->GetNE(); i++){
+		fe = fes->GetFE(i);
+		Array<int> dofs;
+		fes->GetElementDofs(i, dofs);
+		estimator.GetSubVector(dofs, LocVec1);
+		residual.GetSubVector(dofs, LocVec2);
+
+//	    result[i] = ( InnerProduct(LocVec1,LocVec2) );
+	    result[i] = sqrt( InnerProduct(LocVec1,LocVec2) );
+	}
+};

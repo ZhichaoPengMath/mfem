@@ -40,8 +40,8 @@ double nonlinear_source(double u, const Vector &x)
 		return (kr*kr+kz*kz)/x(0)*u -u*u - exp(-u);
 	}
 	else if (sol_opt == 4){	
-		double sigma2=0.05, c1 = 0.8, c2 = 0.2;
-//		double sigma2=0.005, c1 = 0.8, c2 = 0.2;// really really bad convergence
+//		double sigma2=0.05, c1 = 0.8, c2 = 0.2;
+		double sigma2=0.005, c1 = 0.8, c2 = 0.2;// really really bad convergence
 		double r=x(0), res = 0.;
 
 		res = 2.*r*u*
