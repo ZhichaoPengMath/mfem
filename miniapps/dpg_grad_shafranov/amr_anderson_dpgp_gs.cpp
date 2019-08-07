@@ -1,5 +1,5 @@
 #include "mfem.hpp"
-#include "amr_fixed_point_reduced_system_operator.hpp"
+#include "amr_anderson_reduced_system_operator.hpp"
 //#include "RHSCoefficient.hpp"
 #include <fstream>
 #include <iostream>
@@ -97,499 +97,490 @@ void AMRUpdateBlockOperators(
 
 int main(int argc, char *argv[])
 {
-   // 1. Initialize MPI. Parse command-line options
-   int num_procs, myid;
-   MPI_Init(&argc, &argv);
-   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-   MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-
-   const char * mesh_file;
-   mesh_file = "../../data/cerfon_iter_quad.mesh";
-   int order = 1;
-   bool visualization = 1;
-   bool q_visual = 1;
-   bool q_vis_error = false;
-   int ref_levels = -1;
-   int gradgrad_opt = 0;
-   int solver_print_opt = 1;
-   int h1_trace_opt = 0;/* use lower order h1_trace term */
-   int rt_trace_opt = 0;/* use lower order rt_trace term */
-
-
-   double c_divdiv = 1.;
-   double c_gradgrad = 1.;
-
-   double user_pcg_prec_rtol = -1.;
-   int user_pcg_prec_maxit = -1;
-
-   int prec_amg = 1;
-   double amg_perturbation = 1e-3;
-   bool perturb = false;
-
-   bool use_petsc = true;
-
-   bool vhat_amg = false;
-
-   const char *petscrc_file = "";
-
-   /* AMR parameters */
-   int amr_refine_level = 0;
-   /* max number of allowable hanging nodes */
-   int num_hanging_node_limit = 3;
-   /* thresholds for AMR */
-   double max_ref_threshold = 0.25;
-   double global_ref_threshold = 0.125;
-   double abs_ref_threshold = 1e-5;
-
-   bool amr_tri_nonconforming = false;
-
-
-   OptionsParser args(argc, argv);
-
-   args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
-                  "PetscOptions file to use.");
-
-   args.AddOption(&order, "-o", "--order",
-                  "Finite element order (polynomial degree).");
-   args.AddOption(&visualization, "-vis", "--visualization", "-no_vis",
-                  "--no-visualization",
-                  "Enable or disable GLVis visualization.");
-
-   args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
-                  "--no petsc",
-                  "Enable petsc or not");
-
-   args.AddOption(&q_vis_error, "-q_vis_error", "--q_vis_fd", "-no_q_vis_error",
-                  "--no_q_vis_error",
-                  "visualize error of q or not, by default not visualize it");
-
-   args.AddOption(&vhat_amg, "-vhat_amg", "--vhat_amg", "-no_vhat_amg",
-                  "--no_vhat_amg",
-                  "using boomer amg or ads/ams for prconditioning of vhat, ams/ads is better and default");
-
-   args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
-                  "--no-visualization-for-grad-term",
-                  "Enable or disable GLVis visualization for grad term.");
-   args.AddOption(&ref_levels, "-r", "--refine",
-                  "Number of times to refine the mesh uniformly, -1 by default.");
-//   args.AddOption(&divdiv_opt, "-divdiv", "--divdiv",
-//                  "Whether add || ||_{H(div)} in the test norm or not, 1 by default");
-   args.AddOption(&gradgrad_opt, "-gradgrad", "--gradgrad",
-                  "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
-   args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
-                  "printing option for linear solver, 0 by default");
-
-   args.AddOption(&c_divdiv, "-c_divdiv", "--c_divdiv",
-                  "constant to penalize divdiv in the test norm, 1. by default");
-   args.AddOption(&c_gradgrad, "-c_gradgrad", "--c_gradgrad",
-                  "constant to penalize gradgrad in the test norm, 1. by default");
-
-   args.AddOption(&h1_trace_opt, "-h1_trace", "--h1_trace",
-				  " use lower order h1 trace or not, 0 by default");
-   args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
-				  " use lower order rt trace or not, 0 by default");
-
-   args.AddOption(&petsc_linear_solver_rel_tol, "-petsc_ls_rtol", "--petsc_ls_rtol",
-				  " use lower order rt trace or not, 0 by default");
-
-
-
-   args.AddOption(&user_pcg_prec_rtol, "-prec_rtol", "--prec_rtol",
-				  " relative tolerance for the cg solver in preconditioner");
-
-   args.AddOption(&user_pcg_prec_maxit, "-prec_iter", "--prec_iter",
-				  " max iter for the cg solver in preconditioner");
-
-   args.AddOption(&prec_amg, "-prec_amg", "--prec_amg",
-				  " use a perturbed amg preconditionner for the last diagonal block or not, 1 by default");
-
-   args.AddOption(&perturb, "-perturb", "--perturb", "-no_perturb",
-                  "--not perturb precondiitioner",
-                  "Enable perturb preconditioner or not, by derfault not do that");
-
-   args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
-				  " the perturbation for the last diagonal block in the preconditioner");
-
-   args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
-				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
+      // 1. Initialize MPI. Parse command-line options
+      int num_procs, myid;
+      MPI_Init(&argc, &argv);
+      MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+      MPI_Comm_rank(MPI_COMM_WORLD, &myid);
    
-   args.Parse();
-   if(sol_opt == 1){
-		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
-   }
-   else if(sol_opt == 2){
-		mesh_file = "../../data/tri_cerfon_nstx_quad.mesh";
-   }
-   else if(sol_opt == 3){
-		mesh_file = "../../data/tri_ITER_double_null.mesh";
-   }
-   else if(sol_opt == 4){
-		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
-   }
-   else if(sol_opt == 5){
-		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
-   }
-
-   args.AddOption(&mesh_file, "-m", "--mesh",
-                  "Mesh file to use.");
-   /* AMR options */
-   args.AddOption(&amr_refine_level, "-amr_level", "--amr_level",
-                  "how many AMR refinement level");
-
-   args.AddOption(&max_ref_threshold, "-amr_max_tol", "--amr_max_tol",
-                  "relative threshold for adaptive mesh refinement");
-
-   args.AddOption(&global_ref_threshold, "-amr_global_tol", "--amr_global_tol",
-                  "relative threshold for adaptive mesh refinement");
-
-   args.AddOption(&abs_ref_threshold, "-amr_abs_tol", "--amr_abs_tol",
-                  "relative threshold for adaptive mesh refinement");
-
-   args.AddOption(&amr_tri_nonconforming, "-tri_non", "--tri_non", "-tri_conf",
-                  "--tri_conf",
-                  "Conforming or non-conforming AConforming or non-conforming AMR for triangle meshh");
-
-   args.Parse();
-
-
-   if (!args.Good())
-   {
-	   if(myid==0){
-			args.PrintUsage(cout);
-	   }
-	  MPI_Finalize();
-      return 1;
-   }
-   if(myid==0){
-		args.PrintOptions(cout);
-   }
-
-   amr_refine_level = max(amr_refine_level,0); /* avoid negative amr_refine_level */
+      const char * mesh_file;
+      mesh_file = "../../data/cerfon_iter_quad.mesh";
+      int order = 1;
+      int ref_levels = -1;
    
-   /* initialize plotting */
-   socketstream sol_sock;
-   socketstream q_sock;
-   socketstream q_error_sock;
-   char vishost[] = "localhost";
-   int  visport   = 19916;
-   if (visualization)
-   {
-      sol_sock.open(vishost, visport);
-      sol_sock.precision(8);
-	  if(q_visual){
-	      q_sock.open(vishost, visport);
-		  q_sock.precision(8);
-	  }
-	  if(q_vis_error){
-	      q_error_sock.open(vishost, visport);
-          q_error_sock.precision(8);
-	  }
-   }
-
-   // 1b. We initialize PETSc
-   if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
-
-   // 2. Read the mesh from the given mesh file. We can handle triangular,
-   //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
-   //    the same code.
-   Mesh *serial_mesh = new Mesh(mesh_file, 1, 1);
-   int dim = serial_mesh->Dimension();
-
-   /* this line is important */
-   serial_mesh->EnsureNCMesh( amr_tri_nonconforming );
-
-   // 3. Refine the mesh to increase the resolution. In this example we do
-   //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
-   //    largest number that gives a final mesh with no more than 10,000
-   //    elements.
+      bool visualization = 1;
+      bool q_visual = 1;
+      bool q_vis_error = false;
    
-   // 3a. Coonstruct Parallel mesh and do the parallel refinement
-   int par_ref_levels = ref_levels;
-   ParMesh *mesh = new ParMesh(MPI_COMM_WORLD, *serial_mesh);
-   delete serial_mesh;
-   for(int l=0; l < par_ref_levels; l++){
-		mesh->UniformRefinement();
-   }
-   mesh->ReorientTetMesh();
-   int mesh_global_ne = mesh->GetGlobalNE();
-   if(myid == 0){
-		cout << "\nelement number of the mesh: "<< mesh_global_ne<<endl; 
-   }
-
-   // 4. Define the trial, interfacial (trace) and test DPG spaces:
-   //		q = grad u
-   //		qhat trace q\codt n, trace H(div),
-   //		u
-   //		uhat trace u, trace H1
-   //
-   //		test_space L2
-   //    - u0_space: scalar, contains the non-interfacial unknowns
-   //    - uhat_space: trace space, contains the interfacial unkowns and the
-   //      essential boundary unknowns
-   //    - q0_space: vector, contains the non-interfacial unkowns
-   //    - qhat_space: trace space, contains the interfacial unkowns
-   //
-   //    - The test space, test_space, is an enriched space where the enrichment
-   //      degree may depend on the spatial dimension of the domain, the type of
-   //      the mesh and the trial space order.
-   //    - vtest_space for vector test functions
-   //    - stest_space for scalar test functions
+      int gradgrad_opt = 0;
+      int solver_print_opt = 1;
+      int h1_trace_opt = 0;/* use lower order h1_trace term */
+      int rt_trace_opt = 0;/* use lower order rt_trace term */
    
-	/* order of polynomial spaces */
-   unsigned int trial_order = order;				
-   unsigned int h1_trace_order = order + 1;
-   unsigned int rt_trace_order = order ;
-   unsigned int test_order = order + dim;
-
-   if(h1_trace_opt){
-	 h1_trace_order --;
-   }
-   if(rt_trace_opt){
-	  rt_trace_order --;
-   }
-
-   FiniteElementCollection * u0_fec, * q0_fec, * uhat_fec, *qhat_fec, * vtest_fec, * stest_fec;
-
-   u0_fec = new L2_FECollection(trial_order,dim);
-   q0_fec = new L2_FECollection(trial_order,dim);
-
-   uhat_fec = new H1_Trace_FECollection(h1_trace_order,dim);
-   qhat_fec = new RT_Trace_FECollection(rt_trace_order,dim);
-
-   vtest_fec = new L2_FECollection(test_order,dim); 
-   stest_fec = new L2_FECollection(test_order,dim); /* in general the vector test space for \tau
-													   and the scalar test space for v can be
-													   polynomial space with different order */
-
-   ParFiniteElementSpace * u0_space   = new ParFiniteElementSpace(mesh, u0_fec);
-   ParFiniteElementSpace * q0_space   = new ParFiniteElementSpace(mesh, q0_fec, dim);
-   ParFiniteElementSpace * uhat_space = new ParFiniteElementSpace(mesh, uhat_fec);
-   ParFiniteElementSpace * qhat_space = new ParFiniteElementSpace(mesh, qhat_fec);
    
-   ParFiniteElementSpace * vtest_space = new ParFiniteElementSpace(mesh, vtest_fec,dim);
-   ParFiniteElementSpace * stest_space = new ParFiniteElementSpace(mesh, stest_fec);
+      double c_divdiv = 1.;
+      double c_gradgrad = 1.;
    
-   /* piecewise constant finite element space */
-   FiniteElementCollection *piecewise_const_fec = new L2_FECollection(0,dim);
-   ParFiniteElementSpace *piecewise_const_space = new ParFiniteElementSpace(mesh, piecewise_const_fec);
-
-   // 5. Define the block structure of the problem, by creating the offset
-   //    variables. Also allocate two BlockVector objects to store the solution
-   //    and rhs.
-   enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
-
-   int size_q0 = q0_space->TrueVSize();
-   int size_u0 = u0_space->TrueVSize();
-   int size_qhat = qhat_space->TrueVSize();
-   int size_uhat = uhat_space->TrueVSize();
-   int size_vtest = vtest_space->TrueVSize();
-   int size_stest = stest_space->TrueVSize();
-
-   Array<int> offsets(NVAR+1);
-   offsets[0] = 0;
-   offsets[1] = size_q0;
-   offsets[2] = offsets[1] + size_u0;
-   offsets[3] = offsets[2] + size_qhat;
-   offsets[4] = offsets[3] + size_uhat;
-
-   Array<int> offsets_test(3);
-   offsets_test[0] = 0;
-   offsets_test[1] = size_vtest;
-   offsets_test[2] = offsets_test[1] + size_stest;
-
-   HYPRE_Int global_size_q0    = q0_space->GlobalTrueVSize();
-   HYPRE_Int global_size_u0    = u0_space->GlobalTrueVSize();
-   HYPRE_Int global_size_qhat  = qhat_space->GlobalTrueVSize();
-   HYPRE_Int global_size_uhat  = uhat_space->GlobalTrueVSize();
-   HYPRE_Int global_size_vtest = vtest_space->GlobalTrueVSize();
-   HYPRE_Int global_size_stest = stest_space->GlobalTrueVSize();
-
-   if(myid == 0){
-	   std::cout << "\nTotal Number of Unknowns:\n"<< endl
-			     << " U0          " <<  global_size_u0   << endl
-			     << " Q0          " <<  global_size_q0   << endl
-				 << " Uhat        " <<  global_size_uhat << endl
-				 << " Qhat        " <<  global_size_qhat << endl
-				 << " Vector-test " << global_size_vtest << endl
-				 << " Scalar-test " << global_size_stest << endl 
-				 << endl;
-	}
-   // 6. Set up the linear form F(.) which corresponds to the right-hand side of
-   //    the FEM linear system, which in this case is (f,phi_i) where f=1.0 and
-   //    phi_i are the basis functions in the test finite element fespace.
-
-   BlockVector x(offsets);
-//   BlockVector b(offsets);
-   x = 0.;
-
-
-   BlockVector F(offsets_test); /* block vector for the linear form on the right hand side */
-   F = 0.;
-
-   ConstantCoefficient one(1.0);          /* coefficients */
-   VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
-   VectorFunctionCoefficient q_coeff(dim, q_exact);          /* coefficients */
-   FunctionCoefficient u_coeff( u_exact );/* coefficients */
-
-   FunctionCoefficient r_coeff( r_exact ); /* coefficients */
-
-
-
-   ParGridFunction uhat;
-   uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
-   uhat.ProjectCoefficientSkeletonDG(u_coeff);
-
-
-   /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
-   FunctionCoefficient f_coeff( linear_source );/* coefficients */
-   ParLinearForm * linear_source_operator(new ParLinearForm(stest_space) );
-   linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
-   linear_source_operator->Assemble();
-
-
-   // 6. Deal with boundary conditions
-   //    Dirichlet boundary condition is imposed throught trace term  \hat{u}
-   Array<int> ess_bdr(mesh->bdr_attributes.Max());
-   ess_bdr = 1;
-
-   Array<int> ess_trace_vdof_list;/* store the location (index) of  boundary element  */
-   Array<int> ess_trace_tdof_list;
-   uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
-   uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_tdof_list);
-
-
-
-   // 7. Set up the mixed bilinear forms 
-   //    B_mass_q:    (rq,\tau)
-   //    B_u_dot_div: (u, div(\tau) ) 
-   //    B_u_normal_jump:  \lgl \hat{u} , \tau\cdot n\rgl
-   //
-   //	 B_q_weak_div: -(q, \grad v)
-   //	 B_q_jump: \lgl \hat{q}, v \rgl
-   //
-   //    the inverse energy matrix on the discontinuous test space,
-   //    Vinv, Sinv
-   //    and the energy matrix on the continuous trial space, S0.
-   //    V corresponding to ||\tau||^2 + || div(\tau) ||^2
-   //    S corresponding to ||v||^2 + || \grad(v) ||^2
+      double amg_perturbation = 1e-3;
+      bool perturb = false;
    
-   /* operator (q,v) */
-   ParMixedBilinearForm *B_mass_q = new ParMixedBilinearForm(q0_space,vtest_space);
-   B_mass_q->AddDomainIntegrator(new VectorMassIntegrator(r_coeff) );
-   B_mass_q->Assemble();
-   B_mass_q->Finalize();
-
-   if(myid == 0){
-		cout<<endl<< "(q,tau) assembled"<<endl;
-	}
-   /* operator ( u , div(v) ) */
-   /* Vector DivergenceIntegrator(): (div(u), v), where u is a vector and v is a scalar*/
-   /* here we want (u, div(v) ), so we take its transpose */
-   ParMixedBilinearForm *B_u_dot_div = new ParMixedBilinearForm(u0_space,vtest_space);
-   B_u_dot_div->AddDomainIntegrator(new TransposeIntegrator
-											( new VectorDivergenceIntegrator() )
-								   );
-   B_u_dot_div->Assemble();
-   B_u_dot_div->Finalize();
-   B_u_dot_div->SpMat() *= -1.;
-   if(myid == 0){
-		cout<< "( u, div(tau) ) assembled"<<endl;
-   }
-
-   /* operator \lgl u, \tau\cdot n rgl */
-   ParMixedBilinearForm *B_u_normal_jump = new ParMixedBilinearForm(uhat_space, vtest_space);
-   B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
-   B_u_normal_jump->Assemble();
-   B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
-   B_u_normal_jump->Finalize();
-
-   if(myid == 0){
-		cout<<endl<<"< u, tau cdot n > assembled"<<endl;
-   }
-
-   /* operator  -( q, \grad v) */
-   ParMixedBilinearForm * B_q_weak_div = new ParMixedBilinearForm(q0_space, stest_space);
-   B_q_weak_div->AddDomainIntegrator(new DGVectorWeakDivergenceIntegrator( ) );
-   B_q_weak_div->Assemble();
-   B_q_weak_div->Finalize();
-
-   if(myid == 0){
-		cout<<endl<<"-(q, grad(v)  ) assembled"<<endl;
-   }
-
-   /* operator < u_hat,v> */
-   ParMixedBilinearForm *B_q_jump = new ParMixedBilinearForm(qhat_space, stest_space);
-   B_q_jump->AddTraceFaceIntegrator( new TraceJumpIntegrator() );
-   B_q_jump->Assemble();
-   B_q_jump->Finalize();
-
-   if(myid == 0){
-		cout<<endl<<"< q, v > assembled"<<endl;
-   }
-
-   /* get  parallel matrices */
-   HypreParMatrix * matB_mass_q = B_mass_q->ParallelAssemble();
-   HypreParMatrix * matB_u_dot_div = B_u_dot_div->ParallelAssemble();
-   HypreParMatrix * matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
-   HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
-   HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
-
-
-   MPI_Barrier(MPI_COMM_WORLD);
-   /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
-   ParBilinearForm *Vinv = new ParBilinearForm(vtest_space);
-
-   ConstantCoefficient const_divdiv( c_divdiv );          /* coefficients */
-   ConstantCoefficient const_gradgrad( c_gradgrad );          /* coefficients */
- 
-   SumIntegrator *VSum = new SumIntegrator;
-   VSum->AddIntegrator(new VectorMassIntegrator() );
-   VSum->AddIntegrator(new DGDivDivIntegrator(const_divdiv) );
-   if(gradgrad_opt==1){
-		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
-   }
-
-
-
-   Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
-   Vinv->Assemble();
-   Vinv->Finalize();
-
-   ParBilinearForm *Sinv = new ParBilinearForm(stest_space);
-   SumIntegrator *SSum = new SumIntegrator;
-   SSum->AddIntegrator(new MassIntegrator(one) );
-   SSum->AddIntegrator(new DiffusionIntegrator(const_gradgrad) );
-   Sinv->AddDomainIntegrator(new InverseIntegrator(SSum));
-   Sinv->Assemble();
-   Sinv->Finalize();
-
-   if(myid == 0){
-	   cout<<"test norm: "<<endl
-		   <<"|| (tau,v) ||_V^2 = || tau ||^2";
-	   if(c_divdiv==1.){
-	    	cout<<"+|| div(tau) ||^2";
-	   }
-	   else{
-	    	cout<<"+"<<c_divdiv<<"|| div(tau) ||^2";
-	   }
-	   if(gradgrad_opt==1){
-		   cout<<"+|| grad(tau) ||^2";
-	   }
-	   cout<<"+||v||^2";
-	   if(c_gradgrad ==1.){
-		   cout<<"+||grad(v)||^2";
-	   }
-	   else{
-		   cout<<"+"<<c_gradgrad<<"||grad(v)||^2";
-	   }
-	   cout<<endl<<endl;
-   }
-   HypreParMatrix *matVinv = Vinv->ParallelAssemble();
-   HypreParMatrix *matSinv = Sinv->ParallelAssemble();
-
+      bool use_petsc = true;
+   
+      bool vhat_amg = false;
+   
+      const char *petscrc_file = "";
+   
+      /* AMR parameters */
+      int amr_refine_level = 0;
+      /* max number of allowable hanging nodes */
+      int num_hanging_node_limit = 3;
+      /* thresholds for AMR */
+      double max_ref_threshold = 0.25;
+      double global_ref_threshold = 0.125;
+      double abs_ref_threshold = 1e-5;
+   
+      bool amr_tri_nonconforming = false;
+   
+   
+      OptionsParser args(argc, argv);
+   
+   
+      /* order and refienment */
+      args.AddOption(&order, "-o", "--order",
+                     "Finite element order (polynomial degree).");
+   
+      args.AddOption(&ref_levels, "-r", "--refine",
+                     "Number of times to refine the mesh uniformly, -1 by default.");
+   
+      /* visualization */
+      args.AddOption(&visualization, "-vis", "--visualization", "-no_vis",
+                     "--no-visualization",
+                     "Enable or disable GLVis visualization.");
+   
+      args.AddOption(&q_vis_error, "-q_vis_error", "--q_vis_fd", "-no_q_vis_error",
+                     "--no_q_vis_error",
+                     "visualize error of q = -grad(u)/r or not, by default not visualize it ");
+   
+      args.AddOption(&q_visual, "-q_vis", "--visualization for grad term", "-no-vis",
+                     "--no-visualization-for-grad-term",
+                     "Enable or disable GLVis visualization for q = -grad(u)/r.");
+   
+      /* play with test spaces and test norms */
+      args.AddOption(&gradgrad_opt, "-gradgrad", "--gradgrad",
+                     "Whether add ||grad tau || in the test norm or not, tau is a vector, 0 by default");
+      args.AddOption(&solver_print_opt, "-solver_print", "--solver_print",
+                     "printing option for linear solver, 0 by default");
+   
+      args.AddOption(&c_divdiv, "-c_divdiv", "--c_divdiv",
+                     "constant to penalize divdiv in the test norm, 1. by default");
+      args.AddOption(&c_gradgrad, "-c_gradgrad", "--c_gradgrad",
+                     "constant to penalize gradgrad in the test norm, 1. by default");
+   
+      args.AddOption(&h1_trace_opt, "-h1_trace", "--h1_trace",
+   				  " use lower order h1 trace or not, 0 by default");
+      args.AddOption(&rt_trace_opt, "-rt_trace", "--rt_trace",
+   				  " use lower order rt trace or not, 0 by default");
+   
+      /* perturbation or not */
+      args.AddOption(&perturb, "-perturb", "--perturb", "-no_perturb",
+                     "--not perturb precondiitioner",
+                     "Enable perturb preconditioner or not, by derfault not do that");
+   
+      args.AddOption(&amg_perturbation, "-amg_perturbation", "--amg_perturbation",
+   				  " the perturbation for the last diagonal block in the preconditioner");
+   
+      /* which problem to consider */
+      args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
+   				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
+   
+      /* petsc options */
+      args.AddOption(&petsc_linear_solver_rel_tol, "-petsc_ls_rtol", "--petsc_ls_rtol",
+   				  " rel tolerance for petsc lienar solver, can be also changed in petscopts");
+   
+      args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
+                     "PetscOptions file to use.");
+   
+      args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
+                     "--no petsc",
+                     "Enable petsc or not");
+   
+      
+      args.Parse();
+      if(sol_opt == 1){
+   		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
+      }
+      else if(sol_opt == 2){
+   		mesh_file = "../../data/tri_cerfon_nstx_quad.mesh";
+      }
+      else if(sol_opt == 3){
+   		mesh_file = "../../data/tri_ITER_double_null.mesh";
+      }
+      else if(sol_opt == 4){
+   		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
+      }
+      else if(sol_opt == 5){
+   		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
+      }
+   
+      /* mesh */
+      args.AddOption(&mesh_file, "-m", "--mesh",
+                     "Mesh file to use.");
+      /* AMR options */
+      args.AddOption(&amr_refine_level, "-amr_level", "--amr_level",
+                     "how many AMR refinement level");
+   
+      args.AddOption(&max_ref_threshold, "-amr_max_tol", "--amr_max_tol",
+                     "relative threshold for adaptive mesh refinement");
+   
+      args.AddOption(&global_ref_threshold, "-amr_global_tol", "--amr_global_tol",
+                     "relative threshold for adaptive mesh refinement");
+   
+      args.AddOption(&abs_ref_threshold, "-amr_abs_tol", "--amr_abs_tol",
+                     "relative threshold for adaptive mesh refinement");
+   
+   //   args.AddOption(&amr_tri_nonconforming, "-tri_non", "--tri_non", "-tri_conf",
+   //                  "--tri_conf",
+   //                  "Conforming or non-conforming AConforming or non-conforming AMR for triangle meshh");
+   
+      args.Parse();
+   
+   
+      if (!args.Good())
+      {
+   	   if(myid==0){
+   			args.PrintUsage(cout);
+   	   }
+   	  MPI_Finalize();
+         return 1;
+      }
+      if(myid==0){
+   		args.PrintOptions(cout);
+      }
+   
+      amr_refine_level = max(amr_refine_level,0); /* avoid negative amr_refine_level */
+      
+      /* initialize visualization */
+      socketstream sol_sock;
+      socketstream q_sock;
+      socketstream q_error_sock;
+      char vishost[] = "localhost";
+      int  visport   = 19916;
+      if (visualization)
+      {
+         sol_sock.open(vishost, visport);
+         sol_sock.precision(8);
+   	  if(q_visual){
+   	      q_sock.open(vishost, visport);
+   		  q_sock.precision(8);
+   	  }
+   	  if(q_vis_error){
+   	      q_error_sock.open(vishost, visport);
+             q_error_sock.precision(8);
+   	  }
+      }
+   
+      // 1b. Initialize PETSc
+      if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
+   
+      // 2. Read the mesh from the given mesh file. We can handle triangular,
+      //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
+      //    the same code.
+      Mesh *serial_mesh = new Mesh(mesh_file, 1, 1);
+      int dim = serial_mesh->Dimension();
+   
+      /* this line is important */
+      serial_mesh->EnsureNCMesh( amr_tri_nonconforming );
+   
+      // 3. Refine the mesh to increase the resolution. In this example we do
+      //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
+      //    largest number that gives a final mesh with no more than 10,000
+      //    elements.
+      
+      // 3a. Coonstruct Parallel mesh and do the parallel refinement
+      int par_ref_levels = ref_levels;
+      ParMesh *mesh = new ParMesh(MPI_COMM_WORLD, *serial_mesh);
+      delete serial_mesh;
+      for(int l=0; l < par_ref_levels; l++){
+   		mesh->UniformRefinement();
+      }
+      mesh->ReorientTetMesh();
+      int mesh_global_ne = mesh->GetGlobalNE();
+      if(myid == 0){
+   		cout << "\nelement number of the mesh: "<< mesh_global_ne<<endl; 
+      }
+   
+      // 4. Define the trial, interfacial (trace) and test DPG spaces:
+      //		q = grad u
+      //		qhat trace q\codt n, trace H(div),
+      //		u
+      //		uhat trace u, trace H1
+      //
+      //		test_space L2
+      //    - u0_space: scalar, contains the non-interfacial unknowns
+      //    - uhat_space: trace space, contains the interfacial unkowns and the
+      //      essential boundary unknowns
+      //    - q0_space: vector, contains the non-interfacial unkowns
+      //    - qhat_space: trace space, contains the interfacial unkowns
+      //
+      //    - The test space, test_space, is an enriched space where the enrichment
+      //      degree may depend on the spatial dimension of the domain, the type of
+      //      the mesh and the trial space order.
+      //    - vtest_space for vector test functions
+      //    - stest_space for scalar test functions
+      
+   	/* order of polynomial spaces */
+      unsigned int trial_order = order;				
+      unsigned int h1_trace_order = order + 1;
+      unsigned int rt_trace_order = order ;
+      unsigned int test_order = order + dim;
+   
+      if(h1_trace_opt){
+   	 h1_trace_order --;
+      }
+      if(rt_trace_opt){
+   	  rt_trace_order --;
+      }
+   
+      FiniteElementCollection * u0_fec, * q0_fec, * uhat_fec, *qhat_fec, * vtest_fec, * stest_fec;
+   
+      u0_fec = new L2_FECollection(trial_order,dim);
+      q0_fec = new L2_FECollection(trial_order,dim);
+   
+      uhat_fec = new H1_Trace_FECollection(h1_trace_order,dim);
+      qhat_fec = new RT_Trace_FECollection(rt_trace_order,dim);
+   
+      vtest_fec = new L2_FECollection(test_order,dim); 
+      stest_fec = new L2_FECollection(test_order,dim); /* in general the vector test space for \tau
+   													   and the scalar test space for v can be
+   													   polynomial space with different order */
+   
+      ParFiniteElementSpace * u0_space   = new ParFiniteElementSpace(mesh, u0_fec);
+      ParFiniteElementSpace * q0_space   = new ParFiniteElementSpace(mesh, q0_fec, dim);
+      ParFiniteElementSpace * uhat_space = new ParFiniteElementSpace(mesh, uhat_fec);
+      ParFiniteElementSpace * qhat_space = new ParFiniteElementSpace(mesh, qhat_fec);
+      
+      ParFiniteElementSpace * vtest_space = new ParFiniteElementSpace(mesh, vtest_fec,dim);
+      ParFiniteElementSpace * stest_space = new ParFiniteElementSpace(mesh, stest_fec);
+      
+      /* piecewise constant finite element space */
+      FiniteElementCollection *piecewise_const_fec = new L2_FECollection(0,dim);
+      ParFiniteElementSpace *piecewise_const_space = new ParFiniteElementSpace(mesh, piecewise_const_fec);
+   
+      // 5. Define the block structure of the problem, by creating the offset
+      //    variables. Also allocate two BlockVector objects to store the solution
+      //    and rhs.
+      enum {q0_var, u0_var,qhat_var,uhat_var, NVAR};
+   
+      int size_q0 = q0_space->TrueVSize();
+      int size_u0 = u0_space->TrueVSize();
+      int size_qhat = qhat_space->TrueVSize();
+      int size_uhat = uhat_space->TrueVSize();
+      int size_vtest = vtest_space->TrueVSize();
+      int size_stest = stest_space->TrueVSize();
+   
+      Array<int> offsets(NVAR+1);
+      offsets[0] = 0;
+      offsets[1] = size_q0;
+      offsets[2] = offsets[1] + size_u0;
+      offsets[3] = offsets[2] + size_qhat;
+      offsets[4] = offsets[3] + size_uhat;
+   
+      Array<int> offsets_test(3);
+      offsets_test[0] = 0;
+      offsets_test[1] = size_vtest;
+      offsets_test[2] = offsets_test[1] + size_stest;
+   
+      HYPRE_Int global_size_q0    = q0_space->GlobalTrueVSize();
+      HYPRE_Int global_size_u0    = u0_space->GlobalTrueVSize();
+      HYPRE_Int global_size_qhat  = qhat_space->GlobalTrueVSize();
+      HYPRE_Int global_size_uhat  = uhat_space->GlobalTrueVSize();
+      HYPRE_Int global_size_vtest = vtest_space->GlobalTrueVSize();
+      HYPRE_Int global_size_stest = stest_space->GlobalTrueVSize();
+   
+      if(myid == 0){
+   	   std::cout << "\nTotal Number of Unknowns:\n"<< endl
+   			     << " U0          " <<  global_size_u0   << endl
+   			     << " Q0          " <<  global_size_q0   << endl
+   				 << " Uhat        " <<  global_size_uhat << endl
+   				 << " Qhat        " <<  global_size_qhat << endl
+   				 << " Vector-test " << global_size_vtest << endl
+   				 << " Scalar-test " << global_size_stest << endl 
+   				 << endl;
+   	}
+      // 6. Set up the linear form F(.) which corresponds to the right-hand side of
+      //    the FEM linear system, which in this case is (f,phi_i) where f=1.0 and
+      //    phi_i are the basis functions in the test finite element fespace.
+   
+      BlockVector x(offsets);
+      x = 0.;
+   
+      BlockVector F(offsets_test); /* block vector for the linear form on the right hand side */
+      F = 0.;
+   
+      ConstantCoefficient one(1.0);          /* coefficients */
+      VectorFunctionCoefficient vec_zero(dim, zero_fun);          /* coefficients */
+      VectorFunctionCoefficient q_coeff(dim, q_exact);          /* coefficients */
+      FunctionCoefficient u_coeff( u_exact );/* coefficients */
+   
+      FunctionCoefficient r_coeff( r_exact ); /* coefficients */
+   
+      /* grid function */
+      ParGridFunction uhat;
+      uhat.MakeTRef(uhat_space, x.GetBlock(uhat_var), 0);
+      uhat.ProjectCoefficientSkeletonDG(u_coeff);
+   
+   
+      /*****************************************************
+   	* 7. Set up linear form 
+   	* ***************************************************/
+      /* rhs for -(q,\grad v) + \lgl qhat, v \rgl = (f,v) */
+      FunctionCoefficient f_coeff( linear_source );/* coefficients */
+      ParLinearForm * linear_source_operator(new ParLinearForm(stest_space) );
+      linear_source_operator->AddDomainIntegrator( new DomainLFIntegrator(f_coeff) );
+      linear_source_operator->Assemble();
+   
+   
+      // 8. Get essential degree of freedoms for the Dirichlet boundary condition,
+      // which is imposed throught trace term  \hat{u}
+      Array<int> ess_bdr(mesh->bdr_attributes.Max());
+      ess_bdr = 1;
+   
+      Array<int> ess_trace_vdof_list;/* store the location (index) of  boundary element  */
+      Array<int> ess_trace_tdof_list;
+      uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
+      uhat_space->GetEssentialTrueDofs(ess_bdr, ess_trace_tdof_list);
+   
+   
+   
+      // 9. Set up thebilinear forms 
+      //    B_mass_q:    (rq,\tau)
+      //    B_u_dot_div: (u, div(\tau) ) 
+      //    B_u_normal_jump:  \lgl \hat{u} , \tau\cdot n\rgl
+      //
+      //	 B_q_weak_div: -(q, \grad v)
+      //	 B_q_jump: \lgl \hat{q}, v \rgl
+      //
+      //    the inverse energy matrix on the discontinuous test space,
+      //    Vinv, Sinv
+      //    and the energy matrix on the continuous trial space, S0.
+      //    V corresponding to ||\tau||^2 + || div(\tau) ||^2
+      //    S corresponding to ||v||^2 + || \grad(v) ||^2
+      
+      /* operator (q,v) */
+      ParMixedBilinearForm *B_mass_q = new ParMixedBilinearForm(q0_space,vtest_space);
+      B_mass_q->AddDomainIntegrator(new VectorMassIntegrator(r_coeff) );
+      B_mass_q->Assemble();
+      B_mass_q->Finalize();
+   
+      if(myid == 0){
+   		cout<<endl<< "(q,tau) assembled"<<endl;
+   	  }
+      /* operator ( u , div(v) ) */
+      /* Vector DivergenceIntegrator(): (div(u), v), where u is a vector and v is a scalar*/
+      /* here we want (u, div(v) ), so we take its transpose */
+      ParMixedBilinearForm *B_u_dot_div = new ParMixedBilinearForm(u0_space,vtest_space);
+      B_u_dot_div->AddDomainIntegrator(new TransposeIntegrator
+   											( new VectorDivergenceIntegrator() )
+   								   );
+      B_u_dot_div->Assemble();
+      B_u_dot_div->Finalize();
+      B_u_dot_div->SpMat() *= -1.;
+      if(myid == 0){
+   		cout<< "( u, div(tau) ) assembled"<<endl;
+      }
+   
+      /* operator \lgl u, \tau\cdot n rgl */
+      ParMixedBilinearForm *B_u_normal_jump = new ParMixedBilinearForm(uhat_space, vtest_space);
+      B_u_normal_jump->AddTraceFaceIntegrator( new DGNormalTraceJumpIntegrator() );
+      B_u_normal_jump->Assemble();
+      B_u_normal_jump->EliminateEssentialBCFromTrialDofs(ess_trace_vdof_list, uhat, F.GetBlock(0) );
+      B_u_normal_jump->Finalize();
+   
+      if(myid == 0){
+   		cout<<endl<<"< u, tau cdot n > assembled"<<endl;
+      }
+   
+      /* operator  -( q, \grad v) */
+      ParMixedBilinearForm * B_q_weak_div = new ParMixedBilinearForm(q0_space, stest_space);
+      B_q_weak_div->AddDomainIntegrator(new DGVectorWeakDivergenceIntegrator( ) );
+      B_q_weak_div->Assemble();
+      B_q_weak_div->Finalize();
+   
+      if(myid == 0){
+   		cout<<endl<<"-(q, grad(v)  ) assembled"<<endl;
+      }
+   
+      /* operator < u_hat,v> */
+      ParMixedBilinearForm *B_q_jump = new ParMixedBilinearForm(qhat_space, stest_space);
+      B_q_jump->AddTraceFaceIntegrator( new TraceJumpIntegrator() );
+      B_q_jump->Assemble();
+      B_q_jump->Finalize();
+   
+      if(myid == 0){
+   		cout<<endl<<"< q, v > assembled"<<endl;
+      }
+   
+      /* get  parallel matrices */
+      HypreParMatrix * matB_mass_q = B_mass_q->ParallelAssemble();
+      HypreParMatrix * matB_u_dot_div = B_u_dot_div->ParallelAssemble();
+      HypreParMatrix * matB_u_normal_jump = B_u_normal_jump->ParallelAssemble();
+      HypreParMatrix * matB_q_weak_div = B_q_weak_div->ParallelAssemble();
+      HypreParMatrix * matB_q_jump = B_q_jump->ParallelAssemble();
+   
+   
+      MPI_Barrier(MPI_COMM_WORLD);
+      /* mass matrix corresponding to the test norm, or the so-called Gram matrix in literature */
+      ParBilinearForm *Vinv = new ParBilinearForm(vtest_space);
+   
+      ConstantCoefficient const_divdiv( c_divdiv );          /* coefficients */
+      ConstantCoefficient const_gradgrad( c_gradgrad );          /* coefficients */
+    
+      SumIntegrator *VSum = new SumIntegrator;
+      VSum->AddIntegrator(new VectorMassIntegrator() );
+      VSum->AddIntegrator(new DGDivDivIntegrator(const_divdiv) );
+      if(gradgrad_opt==1){
+   		VSum->AddIntegrator(new VectorDiffusionIntegrator() );
+      }
+   
+      Vinv->AddDomainIntegrator(new InverseIntegrator(VSum));
+      Vinv->Assemble();
+      Vinv->Finalize();
+   
+      ParBilinearForm *Sinv = new ParBilinearForm(stest_space);
+      SumIntegrator *SSum = new SumIntegrator;
+      SSum->AddIntegrator(new MassIntegrator(one) );
+      SSum->AddIntegrator(new DiffusionIntegrator(const_gradgrad) );
+      Sinv->AddDomainIntegrator(new InverseIntegrator(SSum));
+      Sinv->Assemble();
+      Sinv->Finalize();
+   
+      if(myid == 0){
+   	   cout<<"test norm: "<<endl
+   		   <<"|| (tau,v) ||_V^2 = || tau ||^2";
+   	   if(c_divdiv==1.){
+   	    	cout<<"+|| div(tau) ||^2";
+   	   }
+   	   else{
+   	    	cout<<"+"<<c_divdiv<<"|| div(tau) ||^2";
+   	   }
+   	   if(gradgrad_opt==1){
+   		   cout<<"+|| grad(tau) ||^2";
+   	   }
+   	   cout<<"+||v||^2";
+   	   if(c_gradgrad ==1.){
+   		   cout<<"+||grad(v)||^2";
+   	   }
+   	   else{
+   		   cout<<"+"<<c_gradgrad<<"||grad(v)||^2";
+   	   }
+   	   cout<<endl<<endl;
+      }
+      HypreParMatrix *matVinv = Vinv->ParallelAssemble();
+      HypreParMatrix *matSinv = Sinv->ParallelAssemble();
+   
       /********************************************************/
 	  /***********************************************************
-	  * 8a. Set up the 1x2 block Least Squares DPG operator, 
+	  * 10a. Set up the 1x2 block Least Squares DPG operator, 
 	  *    the normal equation operator, A = B^t InverseGram B, and
 	  *    the normal equation right-hand-size, b = B^t InverseGram F.
 	  *
@@ -607,7 +598,7 @@ int main(int argc, char *argv[])
 	
 	
 	  /*********************************************
-	   * 8b. allocate memory to store 
+	   * 10b. allocate memory to store 
 	   * Jac =  mass_q	 -u_dot_div  0		u_normal_jump
 	   *        q_weak_div -df/du      q_jump 0
 	   *	   = B - DF/DU
@@ -624,12 +615,12 @@ int main(int argc, char *argv[])
 	  Jac->SetBlock(1, q0_var   ,matB_q_weak_div);
 	  Jac->SetBlock(1, qhat_var ,matB_q_jump);
 	  
-	  
+	  /* G^{-1} = diag(V^{-1},S^{-1} ) */
 	  BlockOperator * InverseGram = new BlockOperator(offsets_test, offsets_test);
 	  InverseGram->SetBlock(0,0,matVinv);
 	  InverseGram->SetBlock(1,1,matSinv);
      /***************************************************************/
-     // 9. Set up a block-diagonal preconditioner for the 4x4 normal equation
+     // 11. Set up a block-diagonal preconditioner for the 4x4 normal equation
      //   We use the "Jacobian" preconditionner
      //
      //   V0
@@ -673,45 +664,46 @@ int main(int argc, char *argv[])
       HypreParMatrix * matShat = NULL;
    
 	  PetscParMatrix * petsc_matShat = NULL;
-      /* By default use petsc to define the AMG preconditioner for the
-   	* third block Shat, and no need to perturb Shat.
-   	* However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
-   	* to make it work */
+	/* By default, we use PETSC, no perturbation needed
+	 *
+   	 * However, if we use the mfem HpreBoomerAMG, we need to perturb Shat 
+   	 * to make it work, due to mfem implementation for BoomerAMG. This is 
+	 * Ad-Hoc and not recommended, though it works fine and fast for many
+	 * problems*/
 
-	  HypreParMatrix * matShat_tmp = NULL;
-	  HypreParMatrix * matB_u_normal_jump_Transpose = NULL;
+//	  HypreParMatrix * matShat_tmp = NULL;
+//	  HypreParMatrix * matB_u_normal_jump_Transpose = NULL;
 
       if(!perturb){
-		  matB_u_normal_jump_Transpose = matB_u_normal_jump->Transpose();
-	      matShat_tmp = ParMult(matVinv, matB_u_normal_jump);
-	      matShat = ParMult(matB_u_normal_jump_Transpose, matShat_tmp);
+//		  matB_u_normal_jump_Transpose = matB_u_normal_jump->Transpose();
+//	      matShat_tmp = ParMult(matVinv, matB_u_normal_jump);
+//	      matShat = ParMult(matB_u_normal_jump_Transpose, matShat_tmp);
+		  matShat = RAP(matVinv,matB_u_normal_jump);
 
-		  petsc_matShat = new PetscParMatrix(matSinv->GetComm(), matShat, Operator::PETSC_MATAIJ);
-
-//		  matShat = RAP(matVinv,matB_u_normal_jump);
+		  petsc_matShat = new PetscParMatrix(matShat->GetComm(), matShat, Operator::PETSC_MATAIJ);
       }
       else{
-   	    amg_perturbation = min(1e-3, amg_perturbation);
-   		cout<<amg_perturbation<<endl;
-   		Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
-      	Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
-      	Sjump->Assemble();
-      	Sjump->Finalize();
-      	Sjump->SpMat() *= amg_perturbation;
-      	Sjump->SpMat() += B_u_normal_jump->SpMat();
-      	matSjump=Sjump->ParallelAssemble(); 
-        matShat = RAP(matSjump, matVinv, matSjump);
+   	      amg_perturbation = min(1e-3, amg_perturbation);
+   		  cout<<amg_perturbation<<endl;
+   		  Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+      	  Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
+      	  Sjump->Assemble();
+      	  Sjump->Finalize();
+      	  Sjump->SpMat() *= amg_perturbation;
+      	  Sjump->SpMat() += B_u_normal_jump->SpMat();
+      	  matSjump=Sjump->ParallelAssemble(); 
+          matShat = RAP(matSjump, matVinv, matSjump);
       }
 
 	  /*******************************************************************************
-	   * 10. pass all the pointer to the infomration interfce,
+	   * 12. pass all the pointer to the infomration interfce,
 	   * everything is passed to PETSC by FixedPointReducedSystemOperator,
 	   * Jac and A is updated throught the FixedPointReducedSystemOperator
 	   * ******************************************************************************/
 	  FixedPointReducedSystemOperator * reduced_system_operator = NULL;
 	
 	  /*******************************************************************************
-	   * 11. Adaptive mesh refinement loop
+	   * 13. Adaptive mesh refinement loop
        *     Solve the normal equation system using the PCG iterative solver.
        *     Check the weighted norm of residual for the DPG least square problem.
        *     Wrap the primal variable in a GridFunction for visualization purposes.
@@ -723,7 +715,7 @@ int main(int argc, char *argv[])
        	   StopWatch timer;
 
 		   /**********************************************************************
-			* 12. Assemble the block Jacobian preconditioner for the current mesh
+			* 14. Assemble the block Jacobian preconditioner for the current mesh
 			* ********************************************************************/
 	       BlockDiagonalPreconditioner prec(offsets);
 
@@ -743,7 +735,6 @@ int main(int argc, char *argv[])
 		   HypreBoomerAMG mfem_prec3;
 	       if( !perturb ){
 	           prec3.SetOperator(*petsc_matShat);
-//	           prec3.SetOperator(*matShat);
 	       	   prec3.SetPrintLevel(0);
 //	       	   prec3->iterative_mode = true;
 
@@ -764,6 +755,8 @@ int main(int argc, char *argv[])
 	       }/* end of if */
 
 
+		   // 15. Pass the pointers to a ReducedSystemOperator, and then link
+		   // with Petsc through the ReducedSystemOperator
 		   reduced_system_operator =  new FixedPointReducedSystemOperator(
 	  	    										&use_petsc,
 	  	    										&perturb,
@@ -780,7 +773,6 @@ int main(int argc, char *argv[])
 	  	     									/* matrices */
 	  	    										matB_mass_q, matB_u_normal_jump, matB_q_weak_div, 
 	  	    										matB_q_jump, matVinv, matSinv,
-//	  	    										matV0, matS0, matVhat, matShat, 
 	  	     									/* block sizes */
 	  	    										offsets, offsets_test,
 	  	     									/* block operators */
@@ -799,6 +791,7 @@ int main(int argc, char *argv[])
        		   }
        	   }
        	   else{
+		   // 16. Solve the problem for the current mesh
        		    PetscNonlinearSolver * petsc_anderson = new PetscNonlinearSolver( MPI_COMM_WORLD );
        		    petsc_anderson->SetOperator( *reduced_system_operator );
        		    petsc_anderson->SetRelTol(1e-10);
@@ -820,7 +813,7 @@ int main(int argc, char *argv[])
        			cout<<"time: "<<timer.RealTime()<<endl;
        	   }
        
-       	// 13. error 
+       	// 17. error 
        	   u0.Distribute( x.GetBlock(u0_var) );
        	   q0.Distribute( x.GetBlock(q0_var) );
        
@@ -843,7 +836,7 @@ int main(int argc, char *argv[])
        	   }
        
        	
-       	// 14. Visualization
+       	// 18. Visualization
        	//	   Save the refined mesh and the solution. This output can be viewed
        	//     later using GLVis: "glvis -m refined.mesh -g sol.gf".
        	   ParGridFunction * q_projection_minus_num = NULL; 
@@ -882,7 +875,7 @@ int main(int argc, char *argv[])
        		  }
        	   }
        	  
-       	   // 14b. Send the solution by socket to a GLVis server.
+       	   // 18b. Send the solution by socket to a GLVis server.
        	   if (visualization)
        	   {
        		  sol_sock << "parallel " << num_procs << " " << myid << "\n";
@@ -902,13 +895,13 @@ int main(int argc, char *argv[])
 
 
 		  /*************************************************************************
-		   * 15. Adaptive mesh refinement
+		   * 19. Adaptive mesh refinement
 		   * ***********************************************************************/
 
 		  /*********************************************************************
-		   * 15a. Error estimator, which is the residual in the dual norm
+		   * 19a. Error estimator, which is the residual in the dual norm
 		   * *******************************************************************/
-		  /* 15a1. calculate the estimator and residual vector for DPG */
+		  /* 19a1. calculate the estimator and residual vector for DPG */
           linear_source_operator->ParallelAssemble( F.GetBlock(1) );
           
 		  /* allocate memory */
@@ -965,7 +958,7 @@ int main(int argc, char *argv[])
 			break;
 		  }
 		  /*********************************************************************
-		   * 15b. coloring the element needs to be refined
+		   * 19b. coloring the element needs to be refined
 		   * *******************************************************************/
 		  Array<int> refine_color;
 
@@ -989,7 +982,7 @@ int main(int argc, char *argv[])
 			} /* if */
 		  }/* loop over all elements */
 
-		  /* 15c. Refine the mesh if needed */
+		  /* 19c. Refine the mesh if needed */
 		  int num_ref = mesh->ReduceInt(refine_color.Size() );
 		  if(myid==0){
 			 cout<<num_ref<<" elements needs to be refined "<<endl;	
@@ -1009,12 +1002,12 @@ int main(int argc, char *argv[])
 		  }
 
 		  /**********************************************************************
-		  * 16. Update the finite element spaces, linear, bilinear forms
+		  * 20. Update the finite element spaces, linear, bilinear forms
 		  * and matrices,
 		  * update is defined in FixedPointReducedSystemOperator
 		  **********************************************************************/
 		  /**********************************************
-		   * 16a. update the (i) finite element spaces 
+		   * 20a. update the (i) finite element spaces 
 		   *				 (ii) block structures 	
 		   ***********************************************/
 		  AMRUpdateFEMSpaceAndBlockStructure( 
@@ -1026,12 +1019,12 @@ int main(int argc, char *argv[])
 
 		  piecewise_const_space->Update();
 		  /*****************************************************************
-		   * 16b. update essential degree of freedoms for the boundary
+		   * 20b. update essential degree of freedoms for the boundary
 		   * conditions 
 		   ****************************************************************/
 		  uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
 		  /****************************************************/
-		  /* 15c. update the block vectors and grid functions */
+		  /* 20c. update the block vectors and grid functions */
 		  /****************************************************/
 		  x.Update(offsets);
 		  x = 0.;
@@ -1044,19 +1037,19 @@ int main(int argc, char *argv[])
 		  u0.Update();
 		  q0.Update();
 		  /************************************************************
-		   * 16d. update linear and bilinear forms
+		   * 20d. update linear and bilinear forms
 		   * **********************************************************/
 	      AMRUpdateOperators( linear_source_operator, /* linear forms */
 						B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
 						Vinv,Sinv, /* bilinear forms */
 						ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
 		  /***************************************************/
-		  /* 16e. Set boundary conditions for block vectors	 */
+		  /* 20e. Set boundary conditions for block vectors	 */
 		  /***************************************************/
 		  uhat.GetTrueDofs(x.GetBlock(uhat_var) );
 
 		  /***************************************************/
-		  /* 16g. Update HypreParMatrices					 */
+		  /* 20g. Update HypreParMatrices					 */
 		  /***************************************************/
 		  AMRUpdateHypreMatrices(/* related bilinear forms */ 
 		   					B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
@@ -1066,9 +1059,9 @@ int main(int argc, char *argv[])
 		  					matVinv, matSinv);
 
 		  /*************************************************/
-		  /* 16h. Update Block Operators				    */
+		  /* 20h. Update Block Operators				    */
 		  /*************************************************/
-		  /* 16h1. resize the operator */
+		  /* 20h1. resize the operator */
 		  delete B;
 		  delete Jac;
 		  delete InverseGram;
@@ -1077,18 +1070,12 @@ int main(int argc, char *argv[])
 		  Jac = new BlockOperator(offsets_test,offsets);
 	      InverseGram = new BlockOperator(offsets_test, offsets_test);
 
-		  /* 16h2. assemble the block operators */
-          //AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
-		  // 				B, Jac, InverseGram, /* block operators */
-		  // 				/* matrices to set small blocks */
-		  // 				matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
-		  // 				matVinv, matSinv);
 	      /**************************************************
-		  * 17. load balancing
+		  * 21. load balancing
 		  * ************************************************/
 		  if(mesh->Nonconforming() ){
 		      mesh->Rebalance();
-		      /* FEM space and block structure */
+		      /* 21a. FEM space and block structure */
               AMRUpdateFEMSpaceAndBlockStructure( 
 						/* finite element spaces */
               			q0_space, u0_space, qhat_space, uhat_space,
@@ -1098,9 +1085,9 @@ int main(int argc, char *argv[])
 
 			 piecewise_const_space->Update();
               
-		      /* locate essential dofs for boundary conditions */
+		      /* 21b. locate essential dofs for boundary conditions */
               uhat_space->GetEssentialVDofs(ess_bdr, ess_trace_vdof_list);
-		      /* update block vectors and grid functions */
+		      /* 21c. update block vectors and grid functions */
               x.Update(offsets);
               x = 0.;
               F.Update(offsets_test);
@@ -1110,23 +1097,23 @@ int main(int argc, char *argv[])
               uhat.ProjectCoefficientSkeletonDG(u_coeff);
               
               u0.Update();
-		      /* linear and bilinear forms */
+		      /* 21d. linear and bilinear forms */
               AMRUpdateOperators( linear_source_operator, /* linear forms */
               			B_mass_q,B_u_dot_div,B_u_normal_jump,B_q_weak_div, B_q_jump, /* bilinear forms */
               			Vinv,Sinv, /* bilinear forms */
               			ess_trace_vdof_list,uhat,&(F.GetBlock(0) ) ); /* deal with boundary conditions */
-		      /* set boundary conditions */
+		      /* 21e. set boundary conditions */
               uhat.GetTrueDofs(x.GetBlock(uhat_var) );
               
-		      /* update Hypre Matrices */
+		      /* 21f. update Hypre Matrices */
               AMRUpdateHypreMatrices(/* related bilinear forms */ 
               				B_mass_q, B_u_dot_div, B_u_normal_jump, B_q_weak_div, B_q_jump,
-              						Vinv, Sinv,
+              				Vinv, Sinv,
               				/* matrices */
-              						matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
-              						matVinv, matSinv);
+              				matB_mass_q, matB_u_dot_div, matB_u_normal_jump, matB_q_weak_div, matB_q_jump,
+              				matVinv, matSinv);
 
-              /* Update block operators */
+              /* 21g. Update block operators */
                delete B;
                delete Jac;
                delete InverseGram;
@@ -1136,6 +1123,13 @@ int main(int argc, char *argv[])
                InverseGram = new BlockOperator(offsets_test, offsets_test);
 
 		  }/* end of load balancing */
+		  
+		  /* 22. Set subblocks block operators
+		   *     Put it here, so no matter the mesh is 
+		   *     conforming or non-conforming, 
+		   *     the block operators are updated and 
+		   *     no extra-updating is wasted due to the 
+		   *     rebalancing */
           AMRUpdateBlockOperators( offsets_test, offsets, /* block structure */
            			B, Jac, InverseGram, /* block operators */
            			/* matrices to set small blocks */
@@ -1143,7 +1137,7 @@ int main(int argc, char *argv[])
 					matVinv, matSinv);
 		   
 		  /**********************************************/
-		  /* 18. Update Block Jacobian Preconditioners */
+		  /* 23. Update Block Jacobian Preconditioners */
 		  /**********************************************/
 		  S0->Update();	
 		  S0->Assemble();
@@ -1161,26 +1155,30 @@ int main(int argc, char *argv[])
 		      petsc_matShat = new PetscParMatrix(matSinv->GetComm(), matShat, Operator::PETSC_MATAIJ);
  	      }
  	      else{
- 	   	    amg_perturbation = min(1e-3, amg_perturbation);
- 	   	    cout<<amg_perturbation<<endl;
-		    delete Sjump;
- 	   	    Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
+ 	   	     amg_perturbation = min(1e-3, amg_perturbation);
+ 	   	     cout<<amg_perturbation<<endl;
+		     delete Sjump;
+ 	   	     Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
  	      	 Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
  	      	 Sjump->Assemble();
  	      	 Sjump->Finalize();
  	      	 Sjump->SpMat() *= amg_perturbation;
  	      	 Sjump->SpMat() += B_u_normal_jump->SpMat();
  	      	 matSjump=Sjump->ParallelAssemble(); 
- 	        matShat = RAP(matSjump, matVinv, matSjump);
+ 	         matShat = RAP(matSjump, matVinv, matSjump);
  	      }
 
 		  /************************************************
-		   * 18. Free the ReducedOperator for current mesh
+		   * 24. Free the ReducedOperator for current mesh
 		   ************************************************/
 		   delete reduced_system_operator;
        } /* end of AMR loop */
 
-//   // 16. Free the used memory.
+//   // 25. Free the used memory.
+   /* block operators */
+   delete InverseGram;
+   delete Jac;
+   delete B;
 	/* bilinear form */
    delete Vinv;
    delete Sinv; 
@@ -1208,6 +1206,8 @@ int main(int argc, char *argv[])
    delete matV0;
    delete matVhat;
    delete matShat;
+
+   delete petsc_matShat;
    /* finite element collection */
    delete u0_fec;
    delete q0_fec;
