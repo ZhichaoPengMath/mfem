@@ -29,11 +29,10 @@ using namespace mfem;
 double petsc_linear_solver_rel_tol = 1e-16;
 
 /**********************************************************/
-class FixedPointReducedSystemOperator : public Operator
+class AndersonReducedSystemOperator : public Operator
 { 
 private:
 	bool * use_petsc;
-	bool * perturb;
 	/****************************************
 	 * pointers to the trial spaces
 	 *  u0_space: interior u, L2
@@ -48,6 +47,12 @@ private:
 	 *  stest_space: scalar L2 test space
 	 *****************************************/
 	ParFiniteElementSpace * vtest_space, * stest_space;
+
+	/*********************************
+	 * linear operator for the right hand side
+	 *********************************/
+    ParLinearForm * linear_source_operator;	
+
 	/*************************************
 	 * Pointer to parallel matrix
 	 * ***********************************/
@@ -58,13 +63,7 @@ private:
     HypreParMatrix * matB_q_jump;
 	HypreParMatrix * matVinv;
 	HypreParMatrix * matSinv;
-	/***********************************************************
-	 * pointer to parallel matrix corresponding to the preconditioner
-	 * *********************************************************/
-	HypreParMatrix * matV0;
-	HypreParMatrix * matS0;
-	HypreParMatrix * matVhat;
-	HypreParMatrix * matShat;
+
 	/******************************
 	 * block structures
 	 * ****************************/
@@ -81,57 +80,51 @@ private:
 	 * *****************************/
 	BlockOperator * B;
 	BlockOperator * Ginv;
-	Vector *b;
-	Vector &F;
-
-//	FGMRESSolver * solver;
-	PetscLinearSolver * solver;
-
-	BlockDiagonalPreconditioner * prec;
-	HypreBoomerAMG * prec0;
-	HypreBoomerAMG * prec1;
-	Solver * prec2;
-	PetscLinearSolver * prec3;
-	HypreBoomerAMG * mfem_prec3;
+	mutable BlockOperator * Jac;
 
 	/* operator calculate J^T G^-1 Bx */
 	mutable Operator * JTGinvB;
 	mutable HypreParMatrix * NDfDu;
-	mutable BlockOperator * Jac;
-	/*********************************
-	 * linear operator for the right hand side
-	 *********************************/
-    ParLinearForm * linear_source_operator;	
+
+	/* block vector */
+	Vector &F;
 
 	/*******************************
 	 * essential vdof for boundary condition
 	 * *****************************/
    const Array<int>& ess_trace_vdof_list;
 		
-
-	/***************************/
-	mutable BlockOperator * Jacobian;
-    mutable Vector fu;	
-
+   /**********************************
+	* solvers 
+	* *******************************/
+    /* block Jacobian preconditioner */
+    BlockDiagonalPreconditioner *P;
+    /* lienar solver */
+    PetscLinearSolver * solver;
 public:
-	FixedPointReducedSystemOperator(
+	AndersonReducedSystemOperator(
+			/* use petsc or not */
 			bool * _use_petsc,
-			bool * _perturb,
+			/* Finite element space */
 			ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 			ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
+			/* linear form */
+			ParLinearForm * _linear_source_operator,
+			/* matrices */
 			HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 			HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
-			/* preconditioner */
-			HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+			/* block structure */
 			Array<int> _offsets, Array<int> _offsets_test,
+			/* block operators */
 			BlockOperator* _B,
 			BlockOperator* _Jac,
 			BlockOperator* _Ginv,
+			/* bc */
 			const Array<int> &_ess_trace_vdof_list,
-			Vector *_b,
+			/* block vector */
 			Vector &_F,
-//		    BlockDiagonalPreconditioner * _P,
-			ParLinearForm * _linear_source_operator
+			/* block Jacobian preconditioner */
+		    BlockDiagonalPreconditioner * _P
 			);
 	// dynamically update the small blcok NDfDu  =  - DF(u)/Du //
 	virtual void UpdateNDFDU(const Vector &x) const;
@@ -142,110 +135,66 @@ public:
 	// Define FF(x) = 0 
 	virtual void Mult( const Vector &x, Vector &y) const;  
 
-	virtual ~FixedPointReducedSystemOperator();
+	virtual ~AndersonReducedSystemOperator();
 
 };
 
-/******************************************************
+ /******************************************************
  *  Pass the pointers, initialization
  *******************************************************/
-FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
+AndersonReducedSystemOperator::AndersonReducedSystemOperator(
+    /* use petsc or not */
 	bool * _use_petsc,
-	bool * _perturb,
+	/* Finite element space */
 	ParFiniteElementSpace * _u0_space, ParFiniteElementSpace * _q0_space, ParFiniteElementSpace * _uhat_space, ParFiniteElementSpace * _qhat_space,
 	ParFiniteElementSpace * _vtest_space, ParFiniteElementSpace * _stest_space,
+	/* lienar form */
+	ParLinearForm * _linear_source_operator,
+	/* matrices */
 	HypreParMatrix * _matB_mass_q, HypreParMatrix * _matB_u_normal_jump, HypreParMatrix * _matB_q_weak_div, 
 	HypreParMatrix * _matB_q_jump, HypreParMatrix * _matVinv, HypreParMatrix * _matSinv,
-	HypreParMatrix * _matV0, HypreParMatrix * _matS0, HypreParMatrix * _matVhat, HypreParMatrix * _matShat,
+	/* block structures */
 	Array<int> _offsets, Array<int> _offsets_test,
+	/* block operators */
 	BlockOperator* _B,
 	BlockOperator* _Jac,
 	BlockOperator* _Ginv,
+	/* boundary conditions */
 	const Array<int> &_ess_trace_vdof_list,
-	Vector *_b,
+	/* block vector */
 	Vector &_F,
-//	BlockDiagonalPreconditioner * _P,
-	ParLinearForm * _linear_source_operator
+	/* block Jacobian preconditioenr */
+	BlockDiagonalPreconditioner * _P
 	):
 	Operator( _B->Width() ), /* size of operator, important !!! */
 	u0_space(_u0_space), q0_space(_q0_space), uhat_space(_uhat_space), qhat_space(_qhat_space),
 	vtest_space(_vtest_space), stest_space(_stest_space),
 	matB_mass_q(_matB_mass_q), matB_u_normal_jump(_matB_u_normal_jump), matB_q_weak_div(_matB_q_weak_div),
 	matB_q_jump(_matB_q_jump), matVinv(_matVinv), matSinv(_matSinv), 
-	matV0(_matV0), matS0(_matS0), matVhat(_matVhat), matShat(_matShat),
 	offsets(_offsets), offsets_test(_offsets_test),
 	B(_B),
 	Jac(_Jac),
 	Ginv(_Ginv),
 	ess_trace_vdof_list(_ess_trace_vdof_list),
 	linear_source_operator(_linear_source_operator),
-	b(_b),
 	F(_F),
-	Jacobian(NULL),
 	NDfDu(NULL),
 	use_petsc(_use_petsc),
-	perturb(_perturb),
-    fu(offsets_test[2] - offsets_test[1] ),
-//	P(_P),
+	P(_P),
 	JTGinvB(NULL)
 {
-
-	/* initialize preconditioner */
-    prec = new BlockDiagonalPreconditioner(offsets);
-
-	prec0 = new HypreBoomerAMG( *matV0 );
-	prec0->SetPrintLevel(0);
-
-    prec1 = new HypreBoomerAMG( *matS0 );	
-	prec1->SetPrintLevel(0);
-
-	prec2 = new HypreAMS( *matVhat, qhat_space );
-//	prec2->SetPrintLevel(1);
-	
-//	prec3 = new HypreBoomerAMG( *matShat );
-//	prec3->SetPrintLevel(0);
-
-	prec3 = NULL;
-	mfem_prec3 = NULL;
-	
-	prec->SetDiagonalBlock(0,prec0);
-	prec->SetDiagonalBlock(1,prec1);
-	prec->SetDiagonalBlock(2,prec2);
-	if( !(*perturb) ){
-		prec3 = new PetscLinearSolver( *matShat );
-			prec3->SetPrintLevel(0);
-			prec3->iterative_mode = true;
-
-			KSP ksp_prec3(*prec3);
-			KSPSetType(ksp_prec3,KSPFCG);
-			KSPAppendOptionsPrefix(ksp_prec3,"s3_");
-			PC  pc_prec3;
-			KSPGetPC(ksp_prec3,&pc_prec3);
-			PCSetType(pc_prec3,PCHYPRE);
-
-			prec->SetDiagonalBlock(3,prec3);
-		}
-		else{
-			mfem_prec3 = new HypreBoomerAMG( *matShat);
-			mfem_prec3->SetPrintLevel(0);
-		}
-
-
 		/* initialize linear solver */
 	//	solver = new FGMRESSolver(MPI_COMM_WORLD);
 		solver = new PetscLinearSolver(MPI_COMM_WORLD);
 		solver->SetRelTol(petsc_linear_solver_rel_tol);
-	//	solver->SetMaxIter(10000);
-	//	solver->SetPrintLevel(1000);
 		solver->SetMaxIter(3000);
-	//	solver->SetPreconditioner(*P);
-		solver->SetPreconditioner(*prec);
+		solver->SetPreconditioner(*P);
 		solver->iterative_mode = true; /* turn on the interative mode to take initial guess */
 	}
 	/******************************************************
 	 *  Update NDfDu = DF(u)/Du
 	 *******************************************************/
-	void FixedPointReducedSystemOperator::UpdateNDFDU(const Vector &x) const
+	void AndersonReducedSystemOperator::UpdateNDFDU(const Vector &x) const
 	{
 		/* calculate df(u)/du  */
 		delete NDfDu;
@@ -254,9 +203,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 		Vector u0_vec(x.GetData(), x.Size() );
 		u0_now.MakeTRef(u0_space,u0_vec , 0);
 		u0_now.SetFromTrueVector();
-	//    DFDUCoefficient dfu_coefficient( &u0_now );
 		FUXCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
-	//    FUCoefficient dfu_coefficient( &u0_now, &derivative_of_nonlinear_source );
 
 		ParMixedBilinearForm * mass_u = new ParMixedBilinearForm( u0_space, stest_space);
 		mass_u->AddDomainIntegrator( new MixedScalarMassIntegrator(dfu_coefficient) );
@@ -268,10 +215,10 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 		delete mass_u;
 		
 	}
-	/******************************************************
+	 /******************************************************
 	 *  Update Jac = B - Df/dx
 	 *******************************************************/
-	void FixedPointReducedSystemOperator::UpdateJac(const Vector &x) const
+	void AndersonReducedSystemOperator::UpdateJac(const Vector &x) const
 	{
 		/* calculate df(u)/du  */
 	//	UpdateNDFDU(x);
@@ -283,7 +230,7 @@ FixedPointReducedSystemOperator::FixedPointReducedSystemOperator(
 	 *  Try to solve F(x) = 0
 	 *  Mult gives us y = F(x)
  *******************************************************/
-void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
+void AndersonReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 {
 	/* update the Df/Du */
 	UpdateNDFDU(x);
@@ -334,16 +281,8 @@ void FixedPointReducedSystemOperator::Mult(const Vector &x, Vector &y) const
 	delete JTGinvB;
 }
 
-FixedPointReducedSystemOperator::~FixedPointReducedSystemOperator(){
+AndersonReducedSystemOperator::~AndersonReducedSystemOperator(){
+	delete NDfDu;
 	delete solver;
-	delete prec;
-
-	delete prec0;
-	delete prec1;
-	delete prec2;
-	delete prec3;
-	delete mfem_prec3;
-
-	delete Jacobian;
 }
 
