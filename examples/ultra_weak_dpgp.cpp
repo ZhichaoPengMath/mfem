@@ -1,4 +1,4 @@
-// Compile with: make ultra_weak_dpg
+// Compile with: make ultra_weak_dpgp
 //
 // Description:  This example code demonstrates the use of the Discontinuous
 //               Petrov-Galerkin (DPG) method in its ultra-weak form
@@ -593,13 +593,13 @@ int main(int argc, char *argv[])
 //	//     Wrap the primal variable in a GridFunction for visualization purposes.
 
 	   StopWatch timer;
-	   timer.Start();
 	   CGSolver pcg(MPI_COMM_WORLD);
 	   pcg.SetOperator(A);
 	   pcg.SetPreconditioner(P);
 	   pcg.SetRelTol(1e-9);
 	   pcg.SetMaxIter(200);
 	   pcg.SetPrintLevel(solver_print_opt);
+	   timer.Start();
 	   pcg.Mult(b,x);
 	   MPI_Barrier(MPI_COMM_WORLD);
 	   timer.Stop();

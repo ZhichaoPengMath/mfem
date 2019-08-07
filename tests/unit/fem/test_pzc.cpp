@@ -116,10 +116,8 @@ TEST_CASE("Test for the DPG domain integrators",
    double cg_rtol = 1e-14;
    double tol = 1e-9;
 
-//   const char *mesh_file = "../../data/inline-quad.mesh";
-//   Mesh *mesh = new Mesh(mesh_file, 1, 1);
-//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
-   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 1.0, 1.0);
+   const char *mesh_file = "../../data/amr-quad.mesh";
+   Mesh *mesh = new Mesh(mesh_file, 1, 1);
    /* mesh [0,2] \times [0,3] */
    cout<<endl<<" mesh formed "<<endl<<endl;
 
@@ -133,8 +131,8 @@ TEST_CASE("Test for the DPG domain integrators",
 //	FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
 //	FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
 
-	FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-	FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
+	FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
+	FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
 
 	cout<<endl<<"finite elment space formed"<<endl;
 
@@ -198,20 +196,6 @@ TEST_CASE("Test for the DPG domain integrators",
 				<<"tmp1_l2: "<<tmp1_l2.Size()<<endl
 				<<"tmp2_l2: "<<tmp2_l2.Size()<<endl
 				<<endl;
-
-//			ofstream my_file("./divdiv.dat"); /*debug */
-//			blf.SpMat().PrintMatlab(my_file);/* debug */
-//
-//
-//			ofstream my_file2("./vdiv.dat"); /*debug */
-//			blf_mfem.SpMat().PrintMatlab(my_file2);/* debug */
-//
-//			ofstream my_file3("./mass.dat"); /*debug */
-//			blf_mass.SpMat().PrintMatlab(my_file3);/* debug */
-//
-//			ofstream my_file4("./diff.dat"); /*debug */
-//			blf_diff.SpMat().PrintMatlab(my_file4);/* debug */
-
 
 			blf.Mult(f_l2, tmp1_l2);
 			blf_mfem.MultTranspose( divf_l2, tmp2_l2);
@@ -289,14 +273,11 @@ TEST_CASE("Test for the DPG face integrators",
    double tol = 1e-9;
 
    /* mesh [0,2] \times [0,3] */
-//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 0.5); /* on the reference element, result is correct */
-//   Mesh mesh(m, n, Element::QUADRILATERAL, 1, 0.5, 1.,0); /* on the reference element, result is correct */
-//   Mesh mesh(m, n, Element::TRIANGLE, 1, 0.5, 1.,0); /* on the reference element, result is correct */
-   
 //   const char *mesh_file = "../../data/inline-quad.mesh";
 //   const char *mesh_file = "../../data/star.mesh";
-   const char *mesh_file = "../../data/square-disc.mesh";
-//   const char *mesh_file = "../../data/inline-tri.mesh";
+//   const char *mesh_file = "../../data/square-disc.mesh";
+   const char *mesh_file = "../../data/inline-tri.mesh";
+//   const char *mesh_file = "../../data/amr-quad.mesh";
    Mesh *mesh = new Mesh(mesh_file, 1, 1);
 
    cout<<endl<<" mesh formed "<<endl<<endl;
@@ -307,10 +288,6 @@ TEST_CASE("Test for the DPG face integrators",
    L2_FECollection s_fec_l2(order,dim);
    H1_Trace_FECollection trace_fec(order,dim);
                          		
-//   FiniteElementSpace fespace_trace(&mesh,&trace_fec);
-//   FiniteElementSpace fespace_l2(&mesh, &fec_l2,dim);
-//   FiniteElementSpace fespace_scalar_l2(&mesh,&s_fec_l2);
-
    FiniteElementSpace fespace_trace(mesh,&trace_fec);
    FiniteElementSpace fespace_l2(mesh, &fec_l2,dim);
    FiniteElementSpace fespace_scalar_l2(mesh,&s_fec_l2);
@@ -372,17 +349,6 @@ TEST_CASE("Test for the DPG face integrators",
 
 			add(tmp1,tmp2,tmp_sum12);
 			subtract(tmp3,tmp_sum12,res);
-
-//			for(int i=0; i<tmp3.Size(); i++){
-//				cout<<i<<": "<<endl
-//					<<"tmp1: "<<tmp1(i)<<endl
-//					<<"tmp2: "<<tmp2(i)<<endl
-//					<<"tmp3: "<<tmp3(i)<<endl
-//					<<"tmp3 - tmp1 -tmp2 ="<<tmp3(i)-tmp2(i)-tmp1(i)<<endl
-//					<<"tmp1+tmp2="<< tmp_sum12(i) <<endl
-//					<<endl;
-//			}
-//
 
 			double error = res.Norml2();
 			cout<<endl<<" norm of 'zero': "<<error<<endl;

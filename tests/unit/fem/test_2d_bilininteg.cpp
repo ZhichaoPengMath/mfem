@@ -169,6 +169,7 @@ TEST_CASE("2D Bilinear Mass Integrators",
    double tol = 1e-9;
 
    Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
+//   Mesh mesh(n, n, Element::QUADRILATERAL, 1, 2.0, 3.0);
 
    FunctionCoefficient f2_coef(f2);
    FunctionCoefficient q2_coef(q2);
