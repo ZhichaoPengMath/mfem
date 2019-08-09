@@ -25,7 +25,7 @@ SEQ_MINIAPPS =
 PAR_MINIAPPS = ex1p_grad_shafranov pultra_weak_dpg_grad_shafranov pultra_weak_dpg_grad_shafranov_refine_study\
 			   dpgp_gs ultra_weak_dpgp dpgp_gs_newton\
 			   jfnk_dpgp_gs\
-			   anderson_dpgp_gs amr_anderson_point_dpgp_gs
+			   anderson_dpgp_gs amr_anderson_dpgp_gs
 ifeq ($(MFEM_USE_MPI),NO)
    MINIAPPS = $(SEQ_MINIAPPS)
 else

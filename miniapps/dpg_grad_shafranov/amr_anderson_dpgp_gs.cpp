@@ -250,6 +250,7 @@ int main(int argc, char *argv[])
       }
       else if(sol_opt == 3){
    		mesh_file = "../../data/tri_ITER_double_null.mesh";
+//   		mesh_file = "../../data/tri_ITER_double_null.mesh";
       }
       else if(sol_opt == 4){
    		mesh_file = "../../data/tri_cerfon_iter_quad.mesh";
