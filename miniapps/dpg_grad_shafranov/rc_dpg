@@ -3,6 +3,8 @@
 -snes_view
 -snes_monitor
 -ksp_monitor
+#-ksp_type fgmres
+-ksp_converged_reason
 #-ksp_view
 
 #-ksp_rtol 1e-20
