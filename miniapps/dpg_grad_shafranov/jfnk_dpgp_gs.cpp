@@ -1,5 +1,43 @@
+/**********************************************************************************************
+ * JFNK to solve nonlinear Grad-Shafranov equation
+ * with DPG method
+ *
+ *
+ * Try to solve:
+ *  r \nabla ( 1/r \nabla u ) = F
+ *  Scheme:
+ *  (rq, v) - (u,div(v) ) + <u_hat, v\cdot n> = 0
+ *  -(q,\nabla \tau) + <q_hat, \tau> = (F/r, \tau) 
+ *  Using DPG method 
+ *  Trial space:
+ *		Interior terms:
+ *  	     q, u \in L^2
+ *  	Trace terms 
+ *  	     \hat{q} \in H^{-1/2} = trace of H(div)
+ *  	     \hat{u} \in H^{1/2}  = trace of H^1
+ *  Check paper:
+ *     	"AN ANALYSIS OF THE PRACTICAL DPG METHOD", 
+ *     	J. GOPALAKRISHNAN AND W. QIU, 2014
+ *  for details,
+ *  the method can be seen as a generalization to the Grad-Shafaranov equation
+ *
+ * Set Source terms in SourceAndBoundary.hpp, we need to split source terms into linear
+ * and non-linear part, also
+ * source = -F(psi,r,z)/r
+ * u is psi
+ * q = -\grad u/r
+ *
+ *
+ * My preconditioner is not good enough, so this code may converges very slow or even diverge
+ * for harder problems
+ *
+ * sample run:  
+ *	 mpirun -np 4 ./jfnk_dpgp_gs -sol_opt 1 -o 2 -r 4 -petscopts rc_dpg_s2hypre
+ *	 mpirun -np 4 ./jfnk_dpgp_gs -sol_opt 1 -o 2 -r 4 -petscopts rc_inexact_newton
+ *
+ * *******************************************************************************************/
 #include "mfem.hpp"
-#include "nonlinear_reduced_system_operator.hpp"
+#include "jfnk_reduced_system_operator.hpp"
 //#include "RHSCoefficient.hpp"
 #include <fstream>
 #include <iostream>
@@ -125,6 +163,15 @@ int main(int argc, char *argv[])
    }
    else if(sol_opt == 2){
 		mesh_file = "../../data/cerfon_nstx_quad.mesh";
+   }
+   else if(sol_opt == 3){
+		mesh_file = "../../data/ITER_double_null.mesh";
+   }
+   else if(sol_opt == 4){
+		mesh_file = "../../data/cerfon_iter_quad.mesh";
+   }
+   else if(sol_opt == 5){
+		mesh_file = "../../data/cerfon_iter_quad.mesh";
    }
    else{
 		mesh_file = "../../data/inline-quad-pzc2.mesh";
@@ -927,119 +974,6 @@ int main(int argc, char *argv[])
    return 0;
 } /* end of main */
 
-
-/* define the source term on the right hand side */
-/* exact solution */
-//double u_exact(const Vector & x){
-//	if(x.Size() == 2){
-//		double xi(x(0) );
-//		double yi(x(1) );
-//
-//		if(sol_opt == 0){
-//			return xi * xi * (sin(4*M_PI*xi) + sin(4*M_PI*yi) + yi );
-//		}
-//		else if(sol_opt == 1){
-//			double d1 =  0.075385029660066;
-//			double d2 = -0.206294962187880;
-//			double d3 = -0.031433707280533;
-//
-//			return   1./8.* pow(x(0),4)
-//				   + d1
-//				   + d2 * x(0)*x(0)
-//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-//		}
-//		else if(sol_opt == 2){
-//			double d1 =  0.015379895031306;
-//    		double d2 = -0.322620578214426;
-//    		double d3 = -0.024707604384971;
-//
-//			return   1./8.* pow(x(0),4)
-//				   + d1
-//				   + d2 * x(0)*x(0)
-//				   + d3 * ( pow(x(0),4) - 4. * x(0)*x(0) * x(1)*x(1) );
-//		}
-//		else{
-//			return 0;
-//		}	
-//	}
-//	else{
-//		return 0;
-//	}
-//
-//}
-
-// The right hand side
-//double f_exact(const Vector & x){
-//	if(x.Size() == 2){
-//		 double xi(x(0) );
-//		 double yi(x(1) );
-//
-//		 if(sol_opt == 0){
-//			 return  -12. *M_PI * cos(4.*M_PI * xi) 
-//				    +xi * 16. *M_PI*M_PI * sin(4.*M_PI * xi)
-//					+xi * 16. *M_PI*M_PI * sin(4.*M_PI * yi)
-//				    -u_exact(x) + 0.01*exp( -u_exact(x) );
-//					-u_exact(x);
-//		 }
-//		 else if( (sol_opt == 1) || (sol_opt == 2) ){
-//			 // r^2/r
-//			return -x(0) 
-//				   -u_exact(x) + 0.5*u_exact(x)*u_exact(x); 
-////				   +0.5*exp( -u_exact(x) );
-////				   -u_exact(x) + exp( -u_exact(x) );
-//				   -u_exact(x);
-////				   +exp( -u_exact(x) );
-//		 }
-//		 else{
-//			return 0;
-//		 }
-//	}
-//	else{
-//		return 0;
-//	}
-//
-//}
-//
-//
-///* exact q = - 1/r grad u */
-//void q_exact(const Vector & x,Vector & q){
-//	if(x.Size() == 2){
-//		 double xi(x(0) );
-//		 double yi(x(1) );
-//
-//		 if(sol_opt == 0){
-//			q(0) =-2 * (sin(4.*M_PI*xi) + sin(4.*M_PI*yi) + yi)
-//		 	      -xi* (4.*M_PI * cos(4.*M_PI*xi) );
-//		 	q(1) =-xi* (4.*M_PI * cos(4.*M_PI*yi) + 1 );
-//		 }
-//		 else if(sol_opt ==1){
-//			double d1 =  0.075385029660066;
-//			double d2 = -0.206294962187880;
-//			double d3 = -0.031433707280533;
-//
-//			q(0) = -1./2. * pow( x(0),2 )
-//				   -d2*2.
-//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-//			q(1) = -d3*( -8.* x(0) * x(1) );
-//		 }
-//		 else if(sol_opt ==2){
-//			double d1 =  0.015379895031306;
-//    		double d2 = -0.322620578214426;
-//    		double d3 = -0.024707604384971;
-//
-//			q(0) = -1./2. * pow( x(0),2 )
-//				   -d2*2.
-//				   -d3*( 4.* pow(x(0),2) - 8.* x(1)*x(1) ); 
-//			q(1) = -d3*( -8.* x(0) * x(1) );
-//		 }
-//		 else{
-//			q = 0.;
-//		 }
-//	}
-//	else{
-//		q  = 0.;
-//	}
-//}
 
 
 /* vector 0 */
