@@ -1,3 +1,39 @@
+/**********************************************************************************************
+ * Anderson acceleration (mixing) to solve nonlinear Grad-Shafranov equation
+ * with DPG method
+ *
+ *
+ * Try to solve:
+ *  r \nabla ( 1/r \nabla u ) = F
+ *  Scheme:
+ *  (rq, v) - (u,div(v) ) + <u_hat, v\cdot n> = 0
+ *  -(q,\nabla \tau) + <q_hat, \tau> = (F/r, \tau)
+ *  Using DPG method
+ *  Trial space:
+ *      Interior terms:
+ *           q, u \in L^2
+ *      Trace terms
+ *           \hat{q} \in H^{-1/2} = trace of H(div)
+ *           \hat{u} \in H^{1/2}  = trace of H^1
+ *  Check paper:
+ *      "AN ANALYSIS OF THE PRACTICAL DPG METHOD",
+ *      J. GOPALAKRISHNAN AND W. QIU, 2014
+ *  for details,
+ *  the method can be seen as a generalization to the Grad-Shafaranov equation
+ *
+ * Set Source terms in SourceAndBoundary.hpp, we need to split source terms into linear
+ * and non-linear part, also
+ * source = -F(psi,r,z)/r
+ * u is psi
+ * q = -\grad u/r
+ *
+ * Adaptive mesh refinement (AMR) based on the error esitmator provided by DPG method is used
+ * AMR only works for conforming mesh refinement for now
+ *
+ * sample run:
+ * mpirun -np 4 ./amr_anderson_dpgp_gs -sol_opt 4 -o 3 -r 0 -petscopts rc_anderson -amr_level 5 -amr_abs_tol 1e-7 -amr_max_tol 0. -amr_global_tol 0.
+ *
+ * *******************************************************************************************/
 #include "mfem.hpp"
 #include "amr_anderson_reduced_system_operator.hpp"
 //#include "RHSCoefficient.hpp"
@@ -824,15 +860,20 @@ int main(int argc, char *argv[])
        	   double q_max_error = q0.ComputeMaxError(q_coeff);
        
        	   int global_ne = mesh->GetGlobalNE();
+		   if(myid == 0){
+       	       cout << "\nelement number of the mesh: "<< global_ne<<endl; 
+		   }
        	   if(myid == 0){
-       			cout << "\nelement number of the mesh: "<< global_ne<<endl; 
-       			cout<< "\n dimension: "<<dim<<endl;
-       			printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
-       			printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
-       			cout<<endl;
-       			printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
-       			printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
-       			cout<<endl;
+			   if(sol_opt <=3 ){
+       		       cout << "\nelement number of the mesh: "<< global_ne<<endl; 
+       			   cout<< "\n dimension: "<<dim<<endl;
+       			   printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
+       			   printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
+       			   cout<<endl;
+       			   printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
+       			   printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
+       			   cout<<endl;
+			   }
        	   }
        
        	

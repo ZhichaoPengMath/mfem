@@ -19,7 +19,7 @@
 
 #-snes_anderson_monitor
 #-snes_anderson_m 3
--snes_anderson_restart_it 20
+#-snes_anderson_restart_it 20
 
 
 
@@ -47,6 +47,7 @@
 #-s3_ksp_converged_reason
 #-s3_ksp_rtol 1e-9
 -s3_ksp_rtol 1e-12
+#-s3_ksp_max_it 
 #-s3_ksp_type preonly
 #-s3_ksp_view
 ###################################################
@@ -57,8 +58,8 @@
 #-ksp_monitor
 #-ksp_view
 -ksp_converged_reason
-#-ksp_rtol 1e-16
--ksp_rtol 1e-12
+-ksp_rtol 1e-16
+#-ksp_rtol 1e-12
 
 ###################################################
 -ksp_type fgmres
