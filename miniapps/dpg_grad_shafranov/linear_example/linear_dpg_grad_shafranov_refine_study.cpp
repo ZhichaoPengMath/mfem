@@ -29,6 +29,7 @@
 //               We recommend viewing examples 1-5 before viewing this example.
 
 #include "mfem.hpp"
+#include "petsc.h"
 #include <fstream>
 #include <iostream>
 
@@ -52,6 +53,9 @@ int main(int argc, char *argv[])
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
+   bool use_petsc = true;
+   bool petsc_linear_solver = true;
+
    const char *mesh_file; 
    int order = 1;
    bool visualization = 1;
@@ -74,7 +78,14 @@ int main(int argc, char *argv[])
    int prec_amg = 1;
    double amg_perturbation = 1e-2;
 
+   // petsc rc file
+   const char *petscrc_file = "";
+
    OptionsParser args(argc, argv);
+
+   args.AddOption(&petscrc_file, "-petscopts", "--petscopts",
+                  "PetscOptions file to use.");
+
    args.AddOption(&order, "-o", "--order",
                   "Finite element order (polynomial degree).");
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
@@ -116,16 +127,24 @@ int main(int argc, char *argv[])
 
    args.AddOption(&sol_opt, "-sol_opt", "--sol_opt",
 				  " exact solution, 0 by default manufactured solution, 1 Cerfon's ITER solution");
+   args.AddOption(&use_petsc, "-petsc", "--petsc", "-no_petsc",
+                  "--no petsc",
+                  "Enable petsc or not");
+
+   args.AddOption(&petsc_linear_solver, "-petsc_linear_solver", "--petsc_linear_solver", "-no_petsc_linear_solver",
+                  "--no petsc_linear_solver",
+                  "Use Petsc or MFEM default lienar sovler, by default use petsc");
+
    args.Parse();
 
    if(sol_opt == 1){
-		mesh_file = "../data/cerfon_iter_quad.mesh";
+		mesh_file = "../../../data/cerfon_iter_quad.mesh";
    }
    else if(sol_opt == 2){
-		mesh_file = "../data/cerfon_nstx_quad.mesh";
+		mesh_file = "../../../data/cerfon_nstx_quad.mesh";
    }
    else{
-		mesh_file = "../data/inline-quad-pzc2.mesh";
+		mesh_file = "../../../data/inline-quad-pzc2.mesh";
    }
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
@@ -142,6 +161,8 @@ int main(int argc, char *argv[])
 		args.PrintOptions(cout);
    }
 
+
+   if (use_petsc) { MFEMInitializePetsc(NULL,NULL,petscrc_file,NULL); }
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
    //    the same code.
@@ -492,27 +513,14 @@ int main(int argc, char *argv[])
 	   	   ParMixedBilinearForm *Sjump = NULL;
 	   	   HypreParMatrix * matSjump = NULL;
 	   	   HypreParMatrix * Shat = NULL;
-	   	   if(prec_amg == 1){
-	   	        amg_perturbation = min(1e-2, amg_perturbation);
-	   	    	Sjump = new ParMixedBilinearForm(uhat_space,vtest_space);
-	   	   		Sjump->AddTraceFaceIntegrator(new DGNormalTraceJumpIntegrator() );
-	   	   		Sjump->Assemble();
-	   	   		Sjump->Finalize();
-	   	   		Sjump->SpMat() *= amg_perturbation;
-	   	   		Sjump->SpMat() += B_u_normal_jump->SpMat();
-	   	   		matSjump=Sjump->ParallelAssemble(); 
-	   	    	delete Sjump;
-	   	    	delete B_u_normal_jump;
-	   	        Shat = RAP(matSjump, matVinv, matSjump);
-	   	   }
+		   PetscParMatrix * petsc_matShat = NULL;
+
+	   	   Shat = RAP(matVinv,matB_u_normal_jump  );
+		   petsc_matShat = new PetscParMatrix(Shat->GetComm(), Shat, Operator::PETSC_MATAIJ);
 	   	   /********************************************************/
-	   	   HypreParMatrix * Shat2  = NULL;
-	   	   if(prec_amg != 1){
-	   	    	Shat2 = RAP(matB_u_normal_jump, matVinv, matB_u_normal_jump);
-	   	   }
 	   	   HypreBoomerAMG *V0inv=NULL, *S0inv=NULL;
    	   	   HypreSolver *Vhatinv=NULL;// *Shatinv=NULL;
-	   	   HypreBoomerAMG *Shatinv = NULL;
+		   PetscLinearSolver Shatinv(MPI_COMM_WORLD);
 	   	   
 	   	   V0inv = new HypreBoomerAMG( *matV0 );
 	   	   V0inv->SetPrintLevel(0);
@@ -528,42 +536,37 @@ int main(int argc, char *argv[])
 	   	   P.SetDiagonalBlock(1, S0inv);
 	   	   P.SetDiagonalBlock(2, Vhatinv);
 
-	   	   HyprePCG *Shatinv2=NULL;
-	   	   if (prec_amg == 1)
-	   	   {
-	   	   	  Shatinv = new HypreBoomerAMG( *Shat );
-	   	      Shatinv->SetPrintLevel(0);
-	   	      P.SetDiagonalBlock(3, Shatinv);
-	   	   }
-	   	   else
-	   	   {
-	   	      if(user_pcg_prec_rtol>0){
-	   	   	   	prec_rtol = min(prec_rtol,user_pcg_prec_rtol);
-	   	   	  }
-	   	   	  if(user_pcg_prec_maxit>0){
-	   	   	   	prec_maxit = max(prec_maxit,user_pcg_prec_maxit);
-	   	   	  }
-	   	      Shatinv2 = new HyprePCG( *Shat2 );
-	   	      Shatinv2->SetPrintLevel(0);
-	   	      Shatinv2->SetTol(prec_rtol);
-	   	      Shatinv2->SetMaxIter(prec_maxit);
-	   	      P.SetDiagonalBlock(3, Shatinv2);
-	   	   }
+		   Shatinv.SetOperator(*petsc_matShat);
+		   Shatinv.SetPrintLevel(0);
 
-//	   Shatinv->SetPrintLevel(1);
+		   KSP ksp_prec3 = KSP(Shatinv);
+		   KSPSetType(ksp_prec3,KSPFCG);
+		   KSPAppendOptionsPrefix(ksp_prec3,"s3_");
+		   PC pc_prec3;
+		   KSPGetPC(ksp_prec3,&pc_prec3);
+		   PCSetType(pc_prec3,PCHYPRE);
+	   	   P.SetDiagonalBlock(3, &Shatinv);
 	
 
 	
 	//	// 10. Solve the normal equation system using the PCG iterative solver.
 	//	//     Check the weighted norm of residual for the DPG least square problem.
 	//	//     Wrap the primal variable in a GridFunction for visualization purposes.
-		   CGSolver pcg(MPI_COMM_WORLD);
-		   pcg.SetOperator(A);
-		   pcg.SetPreconditioner(P);
-		   pcg.SetRelTol(1e-12);
-		   pcg.SetMaxIter(1000);
-		   pcg.SetPrintLevel(solver_print_opt);
-		   pcg.Mult(b,x);
+		  if(petsc_linear_solver){
+			PetscLinearSolver pcg(MPI_COMM_WORLD);
+		   	pcg.SetOperator(A);
+		   	pcg.SetPreconditioner(P);
+		   	pcg.Mult(b,x);
+		  }
+		  else{
+			CGSolver pcg(MPI_COMM_WORLD);
+		   	pcg.SetOperator(A);
+		   	pcg.SetPreconditioner(P);
+		   	pcg.SetRelTol(1e-12);
+		   	pcg.SetMaxIter(1000);
+		   	pcg.SetPrintLevel(solver_print_opt);
+		   	pcg.Mult(b,x);
+		  }
 		
 		   {
 		      BlockVector LSres( offsets_test ), tmp( offsets_test );
@@ -642,14 +645,11 @@ int main(int argc, char *argv[])
    		delete AmatS0;
    		delete matV0;
    		delete Vhat;
-   		delete Shat2;
    		delete Shat;
 	   /* preconditionner */
 	   delete V0inv;
 	   delete S0inv;
 	   delete Vhatinv;
-	   delete Shatinv;
-	   delete Shatinv2;
 	   /* finite element collection */
 	   delete u0_fec;
 	   delete q0_fec;
@@ -685,11 +685,11 @@ int main(int argc, char *argv[])
 	      if (ref_levels == 0)
 	      {
 	         std::cout << "  " << ref_levels << "    "
-	                   << std::setprecision(2) << std::scientific << u_max_error(ref_levels)
+	                   << std::setprecision(4) << std::scientific << u_max_error(ref_levels)
 	                   << "   " << " -       "
-	                   << std::setprecision(2) << std::scientific << q_max_error(ref_levels)
+	                   << std::setprecision(4) << std::scientific << q_max_error(ref_levels)
 	                   << "    " << " -       "
-	                   << std::setprecision(2) << std::scientific << dual_norm_error(ref_levels)
+	                   << std::setprecision(4) << std::scientific << dual_norm_error(ref_levels)
 	                   << "    " << " -       "
 					   << endl;
 	      }
@@ -704,11 +704,11 @@ int main(int argc, char *argv[])
 	         double dual_order  = log(dual_norm_error(ref_levels)/dual_norm_error(ref_levels-1))/log(
 	                                 0.5);
 	         std::cout << "  " << ref_levels << "    "
-	                   << std::setprecision(2) << std::scientific << u_max_error(ref_levels)
+	                   << std::setprecision(4) << std::scientific << u_max_error(ref_levels)
 	                   << "  " << std::setprecision(4) << std::fixed << u_order
-	                   << "    " << std::setprecision(2) << std::scientific << q_max_error(ref_levels)
+	                   << "    " << std::setprecision(4) << std::scientific << q_max_error(ref_levels)
 	                   << "   " << std::setprecision(4) << std::fixed << q_order
-	                   << "    " << std::setprecision(2) << std::scientific << dual_norm_error(ref_levels)
+	                   << "    " << std::setprecision(4) << std::scientific << dual_norm_error(ref_levels)
 	                   << "   " << std::setprecision(4) << std::fixed << dual_order
 					   <<endl;
 	      }
@@ -741,12 +741,6 @@ double f_exact(const Vector & x){
 		 else{
 			return 0;
 		 }
-	}
-	else if(x.Size() == 3){
-		return 12.*M_PI*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
-	}
-	else if(x.Size() == 1){
-		return 4.*M_PI*M_PI*sin( 2.*M_PI* x(0) ) ;
 	}
 	else{
 		return 0;
@@ -786,12 +780,6 @@ double u_exact(const Vector & x){
 		else{
 			return 0;
 		}
-	}
-	else if(x.Size() ==3 ){
-		return x(0) + sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) ); 
-	}
-	else if(x.Size() == 1){
-		return sin(2. * M_PI* x(0) ) ;
 	}
 	else{
 		return 0;
@@ -833,14 +821,6 @@ void q_exact(const Vector & x,Vector & q){
 		 else{
 			q = 0.;
 		 }
-	}
-	else if(x.Size() == 3){
-		q(0) = -1. - 2.*M_PI* cos(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
-		q(1) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * cos(2.*M_PI*x(1) ) * sin(2.*M_PI*x(2) );
-		q(2) =     - 2.*M_PI* sin(2.*M_PI*x(0) ) * sin(2.*M_PI*x(1) ) * cos(2.*M_PI*x(2) );
-	}
-	else if(x.Size() == 1){
-		q(0) = -2.*M_PI * cos(2.*M_PI* x(0) );
 	}
 	else{
 		q  = 0.;
