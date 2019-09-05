@@ -29,7 +29,7 @@ PAR_EXAMPLES = ex1p ex2p ex3p ex4p ex5p ex6p ex7p ex8p ex9p ex10p ex11p ex12p\
  ex13p ex14p ex15p ex16p ex17p ex18p ex19p ex20p ex21p\
  ex1p_pzc ex8p_pzc test_parallel ultra_weak_dpgp ultra_weak_dpgp_refine_study\
  pultra_weak_dpg_grad_shafranov pultra_weak_dpg_grad_shafranov_refine_study\
- ex1p_grad_shafranov
+ ex1p_grad_shafranov ex1p_grad_shafranov_refine
 
 ifeq ($(MFEM_USE_MPI),NO)
    EXAMPLES = $(SEQ_EXAMPLES)
