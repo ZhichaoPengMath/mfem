@@ -28,7 +28,10 @@
  * q = -\grad u/r
  *
  *
- * sample run:  mpirun -np 4 ./anderson_dpgp_gs -sol_opt 3 -o 3 -r 4 -petscopts rc_anderson
+ * sample run:  
+ *		mpirun -np 4 ./anderson_dpgp_gs -petscopts rc_anderson -sol_opt 3 -m ../../data/DShape -o 1 -r 0
+ *		mpirun -np 4 ./anderson_dpgp_gs -petscopts rc_anderson -sol_opt 3 -m ../../data/ITER -o 1 -r 0
+ *		mpirun -np 4 ./anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/DShape -o 1 -r 0
  *
  * *******************************************************************************************/
 #include "mfem.hpp"
@@ -771,10 +774,9 @@ int main(int argc, char *argv[])
 	   if(myid == 0){
 		    if( sol_opt<=3 ){
 				cout<< "\n dimension: "<<dim<<endl;
-				printf("\n|| u_h - u ||_{L^2} = %e \n", u_l2_error );
+				printf("\n|| u_h - u ||_{L^2} = %e ", u_l2_error );
 				printf("\n|| q_h - q ||_{L^2} = %e \n", q_l2_error );
-				cout<<endl;
-				printf("\n|| u_h - u ||_{L^inf} = %e \n", u_max_error );
+				printf("\n|| u_h - u ||_{L^inf} = %e ", u_max_error );
 				printf("\n|| q_h - q ||_{L^inf} = %e \n", q_max_error );
 				cout<<endl;
 			}

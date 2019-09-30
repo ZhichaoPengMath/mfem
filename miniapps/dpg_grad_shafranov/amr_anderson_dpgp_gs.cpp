@@ -32,6 +32,7 @@
  *
  * sample run:
  * mpirun -np 4 ./amr_anderson_dpgp_gs -sol_opt 4 -o 3 -r 0 -petscopts rc_anderson -amr_level 5 -amr_abs_tol 1e-7 -amr_max_tol 0. -amr_global_tol 0.
+ * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/DShape -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0. -amr_global_tol 0
  *
  * *******************************************************************************************/
 #include "mfem.hpp"
@@ -944,6 +945,7 @@ int main(int argc, char *argv[])
 		   * 19a. Error estimator, which is the residual in the dual norm
 		   * *******************************************************************/
 		  /* 19a1. calculate the estimator and residual vector for DPG */
+		  F = 0.;
           linear_source_operator->ParallelAssemble( F.GetBlock(1) );
           
 		  /* allocate memory */
@@ -987,10 +989,22 @@ int main(int argc, char *argv[])
 
 		  ParGridFunction local_u_estimator(piecewise_const_space);
 		  ParGridFunction local_q_estimator(piecewise_const_space);
+		  ParGridFunction local_estimator(piecewise_const_space);
 
 
 		  ElementErrorEstimate( vtest_space, UEstimator, UResidual, local_u_estimator);
 		  ElementErrorEstimate( stest_space, QEstimator, QResidual, local_q_estimator);
+		  ElementErrorEstimate( stest_space, QEstimator, QResidual, local_estimator);
+		  for(int i=0; i<mesh->GetNE(); i++){
+			local_estimator(i) = local_u_estimator(i) + local_q_estimator(i) ;
+				if(local_estimator(i)<-5e-10){
+					cout<<"i: "<<local_estimator(i)<<endl;
+				}
+				if(local_estimator(i)<0){
+					local_estimator(i) = 0.;
+				}
+			local_estimator(i) = sqrt(local_estimator(i) );
+		  }
 
 		  if(myid == 0){
 				printf("|| Bx - F ||_{G^-1} || = %e \n ",res);
@@ -1004,20 +1018,37 @@ int main(int argc, char *argv[])
 		   * *******************************************************************/
 		  Array<int> refine_color;
 
-		  double rank_max_q_error = local_q_estimator.Max(); /* max local error on current rank */
-		  double max_q_error = 0.; /* max local error */
-		  MPI_Allreduce(&rank_max_q_error,&max_q_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+		  double rank_max_error = local_estimator.Max(); /* max local error on current rank */
+		  double max_error = 0.; /* max local error */
+		  MPI_Allreduce(&rank_max_error,&max_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
 
-		  double rank_sum_q_estimator = local_q_estimator.Norml1();
-		  double sum_q_estimator = 0.;
-		  MPI_Allreduce(&rank_sum_q_estimator,&sum_q_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+		  double rank_sum_estimator = local_estimator.Norml1();
+		  double sum_estimator = 0.;
+		  MPI_Allreduce(&rank_sum_estimator,&sum_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
+//		  double rank_max_q_error = local_q_estimator.Max(); /* max local error on current rank */
+//		  double max_q_error = 0.; /* max local error */
+//		  MPI_Allreduce(&rank_max_q_error,&max_q_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+//
+//		  double rank_sum_q_estimator = local_q_estimator.Norml1();
+//		  double sum_q_estimator = 0.;
+//		  MPI_Allreduce(&rank_sum_q_estimator,&sum_q_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
+//		  double rank_max_u_error = local_u_estimator.Max(); /* max local error on current rank */
+//		  double max_u_error = 0.; /* max local error */
+//		  MPI_Allreduce(&rank_max_u_error,&max_u_error,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+//
+//		  double rank_sum_u_estimator = local_u_estimator.Norml1();
+//		  double sum_u_estimator = 0.;
+//		  MPI_Allreduce(&rank_sum_u_estimator,&sum_u_estimator,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
 
 		  for(int i=0; i <mesh->GetNE(); i++){
+//			  cout<<local_estimator(i)<<endl;
 		   if(  
-			   (  (local_q_estimator(i) > abs_ref_threshold)	
-			&& (  (local_q_estimator(i) > max_ref_threshold*max_q_error)
-			    &&(local_q_estimator(i) > global_ref_threshold*sum_q_estimator/sqrt(mesh->GetNE() ) ) 
+			   (  (local_estimator(i) > abs_ref_threshold)	
+			&& (  (local_estimator(i) > max_ref_threshold*max_error )
+			    &&(local_estimator(i) > global_ref_threshold*sum_estimator/sqrt(mesh->GetNE() ) ) 
 			   ) )
 			 ){
 				refine_color.Append(i);
@@ -1453,7 +1484,7 @@ void ElementErrorEstimate( FiniteElementSpace * fes,
 		estimator.GetSubVector(dofs, LocVec1);
 		residual.GetSubVector(dofs, LocVec2);
 
-//	    result[i] = ( InnerProduct(LocVec1,LocVec2) );
-	    result[i] = sqrt( InnerProduct(LocVec1,LocVec2) );
+	    result[i] = ( InnerProduct(LocVec1,LocVec2) );
+//	    result[i] = sqrt( InnerProduct(LocVec1,LocVec2) );
 	}
 };

@@ -27,6 +27,10 @@
 //               of block operators and preconditioners.
 //
 //               We recommend viewing examples 1-5 before viewing this example.
+//               mpirun -np 4 ./linear_dpg_grad_shafranov_refine_study -petscopts rc_linear -m ../../../data/ITER -sol_opt 1 -o 1 -r 0 -tr 4
+//               mpirun -np 4 ./linear_dpg_grad_shafranov_refine_study -petscopts rc_linear -m ../../../data/ITER -sol_opt 1 -o 2 -r 0 -tr 4
+//               mpirun -np 4 ./linear_dpg_grad_shafranov_refine_study -petscopts rc_linear -m ../../../data/NSTX -sol_opt 2 -o 1 -r 0 -tr 4
+//               mpirun -np 4 ./linear_dpg_grad_shafranov_refine_study -petscopts rc_linear -m ../../../data/NSTX -sol_opt 2 -o 2 -r 0 -tr 4
 
 #include "mfem.hpp"
 #include "petsc.h"
