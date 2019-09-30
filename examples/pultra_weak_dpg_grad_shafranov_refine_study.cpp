@@ -194,7 +194,6 @@ int main(int argc, char *argv[])
    //      the mesh and the trial space order.
    //    - vtest_space for vector test functions
    //    - stest_space for scalar test functions
-   
 	for(int ref_i = 0; ref_i < total_refine_level; ref_i++)
 	{
 
