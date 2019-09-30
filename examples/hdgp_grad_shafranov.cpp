@@ -2,15 +2,6 @@
 //
 // Compile with: make hdg_poissonp
 //
-// Sample runs:  
-//         mpirun -np 1 hdgp_grad_shafranov -o 1 -r 1 -tr 4 -no-vis
-//         mpirun -np 2 hdgp_grad_shafranov -o 5 -r 1 -tr 4 -no-vis
-//         mpirun -np 2 hdgp_grad_shafranov -o 1 -r 4 -tr 1
-//         mpirun -np 3 hdgp_grad_shafranov -o 5 -r 4 -tr 1
-//         mpirun -np 2 hdgp_grad_shafranov -o 1 -r 1 -tr 4 -no-vis -m ../data/inline-tri
-//         mpirun -np 2 hdgp_grad_shafranov -o 5 -r 1 -tr 4 -no-vis -m ../data/inline-tri
-//         mpirun -np 4 hdgp_grad_shafranov -o 1 -r 5 -tr 1 -m ../data/inline-tri
-//         mpirun -np 2 hdgp_grad_shafranov -o 5 -r 5 -tr 1 -m ../data/inline-tri
 //
 // Description:  This example code solves the 2D/3D diffusion problem
 //                - \nabla \cdot ( 1/r \nabla u) = f
@@ -34,8 +25,12 @@
 // discontinuous Galerkin method for linear convection–diffusion equations,
 // J. Comput. Phys., 2009, 228:9, 3232--3254.
 //
-// Contributed by: T. Horvath, S. Rhebergen, A. Sivas
-//                 University of Waterloo
+// Code is based on the laplace solver written by
+//					T. Horvath, S. Rhebergen, A. Sivas
+//					University of Waterloo
+//
+// mpirun -np 4 ./hdgp_grad_shafranov -m ../data/ITER -sol_opt 1 -o 2 -r 0 -tr 4
+// mpirun -np 4 ./hdgp_grad_shafranov -m ../data/NSTX -sol_opt 2 -o 2 -r 0 -tr 4
 
 #include "mfem.hpp"
 #include <fstream>
