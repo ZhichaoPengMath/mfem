@@ -591,13 +591,13 @@ int main(int argc, char *argv[])
          if (ref_levels == 0)
          {
             std::cout << "  " << ref_levels << "   "
-                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
+                      << std::setprecision(4) << std::scientific << u_l2errors(ref_levels)
                       << "   " << " -      "
-                      << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
+                      << std::setprecision(4) << std::scientific << q_l2errors(ref_levels)
                       << "    " << " -      "
-                      << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
+                      << std::setprecision(4) << std::scientific << mean_l2errors(ref_levels)
                       << "    " << " -      "
-                      << std::setprecision(2) << std::scientific << u_star_l2errors(ref_levels)
+                      << std::setprecision(4) << std::scientific << u_star_l2errors(ref_levels)
                       << "    " << " -      " << std::endl;
          }
          else
@@ -611,15 +611,15 @@ int main(int argc, char *argv[])
             double u_star_order = log(u_star_l2errors(ref_levels)/u_star_l2errors(
                                          ref_levels-1))/log(0.5);
             std::cout << "  " << ref_levels << "   "
-                      << std::setprecision(2) << std::scientific << u_l2errors(ref_levels)
-                      << "  " << std::setprecision(4) << std::fixed << u_order
-                      << "   " << std::setprecision(2) << std::scientific << q_l2errors(ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << q_order
-                      << "   " << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << mean_order
-                      << "   " << std::setprecision(2) << std::scientific << u_star_l2errors(
+                      << std::setprecision(4) << std::scientific << u_l2errors(ref_levels)
+                      << "  " << std::setprecision(2) << std::fixed << u_order
+                      << "   " << std::setprecision(4) << std::scientific << q_l2errors(ref_levels)
+                      << "   " << std::setprecision(2) << std::fixed << q_order
+                      << "   " << std::setprecision(4) << std::scientific << mean_l2errors(ref_levels)
+                      << "   " << std::setprecision(2) << std::fixed << mean_order
+                      << "   " << std::setprecision(4) << std::scientific << u_star_l2errors(
                          ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << u_star_order << std::endl;
+                      << "   " << std::setprecision(2) << std::fixed << u_star_order << std::endl;
          }
       }
 	  /******************************************/
@@ -632,13 +632,13 @@ int main(int argc, char *argv[])
          if (ref_levels == 0)
          {
             std::cout << "  " << ref_levels << "   "
-                      << std::setprecision(2) << std::scientific << u_maxerrors(ref_levels)
+                      << std::setprecision(4) << std::scientific << u_maxerrors(ref_levels)
                       << "   " << " -      "
-                      << std::setprecision(2) << std::scientific << q_maxerrors(ref_levels)
+                      << std::setprecision(4) << std::scientific << q_maxerrors(ref_levels)
                       << "    " << " -      "
-                      << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
+                      << std::setprecision(4) << std::scientific << mean_l2errors(ref_levels)
                       << "    " << " -      "
-                      << std::setprecision(2) << std::scientific << u_star_maxerrors(ref_levels)
+                      << std::setprecision(4) << std::scientific << u_star_maxerrors(ref_levels)
                       << "    " << " -      " << std::endl;
          }
          else
@@ -653,14 +653,14 @@ int main(int argc, char *argv[])
                                          ref_levels-1))/log(0.5);
             std::cout << "  " << ref_levels << "   "
                       << std::setprecision(2) << std::scientific << u_maxerrors(ref_levels)
-                      << "  " << std::setprecision(4) << std::fixed << u_order
-                      << "   " << std::setprecision(2) << std::scientific << q_maxerrors(ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << q_order
-                      << "   " << std::setprecision(2) << std::scientific << mean_l2errors(ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << mean_order
-                      << "   " << std::setprecision(2) << std::scientific << u_star_maxerrors(
+                      << "  " << std::setprecision(2) << std::fixed << u_order
+                      << "   " << std::setprecision(4) << std::scientific << q_maxerrors(ref_levels)
+                      << "   " << std::setprecision(2) << std::fixed << q_order
+                      << "   " << std::setprecision(4) << std::scientific << mean_l2errors(ref_levels)
+                      << "   " << std::setprecision(2) << std::fixed << mean_order
+                      << "   " << std::setprecision(4) << std::scientific << u_star_maxerrors(
                          ref_levels)
-                      << "   " << std::setprecision(4) << std::fixed << u_star_order << std::endl;
+                      << "   " << std::setprecision(2) << std::fixed << u_star_order << std::endl;
          }
       }
 	  /******************************************/
