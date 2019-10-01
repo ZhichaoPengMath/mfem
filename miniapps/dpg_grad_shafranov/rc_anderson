@@ -29,10 +29,11 @@
 
 #-snes_ksp_ew_conv  # a flag for inexact newton
 
+-snes_max_it 10
 
 -snes_stol 1e-16
 #-snes_rtol 1e-9
--snes_rtol 1e-9
+-snes_rtol 1e-10
 #-snes_rtol 1e-11
 #-snes_rtol 1e-12
 #-snes_rtol 1e-8
