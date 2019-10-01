@@ -33,6 +33,8 @@
  * sample run:
  * mpirun -np 4 ./amr_anderson_dpgp_gs -sol_opt 4 -o 3 -r 0 -petscopts rc_anderson -amr_level 5 -amr_abs_tol 1e-7 -amr_max_tol 0. -amr_global_tol 0.
  * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/DShape -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0. -amr_global_tol 0
+ * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/DShape_very_refine -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-8 -amr_max_tol 0. -amr_global_tol 0
+ * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 1 -m ../../data/ITER -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0. -amr_global_tol 0
  *
  * *******************************************************************************************/
 #include "mfem.hpp"
@@ -945,7 +947,6 @@ int main(int argc, char *argv[])
 		   * 19a. Error estimator, which is the residual in the dual norm
 		   * *******************************************************************/
 		  /* 19a1. calculate the estimator and residual vector for DPG */
-		  F = 0.;
           linear_source_operator->ParallelAssemble( F.GetBlock(1) );
           
 		  /* allocate memory */
@@ -976,6 +977,9 @@ int main(int argc, char *argv[])
           InverseGram->Mult(BlockEstimator, BlockResidual);
 
           double res = sqrt(InnerProduct(BlockEstimator,BlockResidual) );
+		  if(myid == 0){
+				printf("|| Bx - F ||_{G^-1} || = %e \n ",res);
+		  }
 		  /* subblocks */
 		  ParGridFunction UEstimator(vtest_space);
 		  UEstimator.SetFromTrueDofs( BlockEstimator.GetBlock(0) );
@@ -994,7 +998,6 @@ int main(int argc, char *argv[])
 
 		  ElementErrorEstimate( vtest_space, UEstimator, UResidual, local_u_estimator);
 		  ElementErrorEstimate( stest_space, QEstimator, QResidual, local_q_estimator);
-		  ElementErrorEstimate( stest_space, QEstimator, QResidual, local_estimator);
 		  for(int i=0; i<mesh->GetNE(); i++){
 			local_estimator(i) = local_u_estimator(i) + local_q_estimator(i) ;
 				if(local_estimator(i)<-5e-10){
@@ -1006,9 +1009,6 @@ int main(int argc, char *argv[])
 			local_estimator(i) = sqrt(local_estimator(i) );
 		  }
 
-		  if(myid == 0){
-				printf("|| Bx - F ||_{G^-1} || = %e \n ",res);
-		  }
 
 		  if(amr_iter>=amr_refine_level){
 			break;
