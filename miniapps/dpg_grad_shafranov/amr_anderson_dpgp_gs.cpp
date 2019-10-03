@@ -37,9 +37,9 @@
  * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 1 -m ../../data/ITER -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-8 -amr_max_tol 0. -amr_global_tol 0
  * mpirun -np 4 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 2 -m ../../data/NSTX -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-8 -amr_max_tol 0. -amr_global_tol 0
  *
- * mpirun -np 1 ./amr_anderson_dpgp_gs -sol_opt 4 -o 2 -r 0 -petscopts rc_anderson -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0.025 -amr_global_tol 0.025
- * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 1 -m ../../data/ITER -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-7 -amr_max_tol 0.025 -amr_global_tol 0.025
- * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 2 -m ../../data/NSTX -o 2 -r 0 -amr_level 5 -amr_abs_tol 1e-7 -amr_max_tol 0.025 -amr_global_tol 0.025
+ * mpirun -np 1 ./amr_anderson_dpgp_gs -sol_opt 4 -m ../../data/tri_cerfon_iter_symmetric.mesh -o 2 -r 0 -petscopts rc_anderson -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0.025 -amr_global_tol 0.025
+ * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 1 -m ../../data/ITER -o 2 -r 0 -amr_level 5 -amr_abs_tol 5e-8 -amr_max_tol 0.025 -amr_global_tol 0.025
+ * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 2 -m ../../data/NSTX -o 2 -r 0 -amr_level 5 -amr_abs_tol 5e-7 -amr_max_tol 0.025 -amr_global_tol 0.025
  * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/DShape -o 1 -r 0 -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0.025 -amr_global_tol 0.025
  *
  * mpirun -np 1 ./amr_anderson_dpgp_gs -petscopts rc_anderson -sol_opt 5 -m ../../data/ITER -o 1 -r 0 -amr_level 5 -amr_abs_tol 1e-6 -amr_max_tol 0.025 -amr_global_tol 0.025
