@@ -12,10 +12,11 @@ Anderson mixing method to solve nonlinear Grad-Shafranov equation
   RHSCoefficient.hpp
   rc_anderson
 
-Anderson mixing method to solve nonlinear Grad-Shafranov equation, with conforming
+(i) Anderson mixing method to solve nonlinear Grad-Shafranov equation, with conforming
 adaptive mesh refinement
+(ii) negative numbers in output due to the error to invert the matrix
 
-2 nonlinear_dpgp_gs.cpp 
+3 nonlinear_dpgp_gs.cpp 
   nonlinear_reduced_system_operator.hpp
   SourceAndBoundary.hpp
   RHSCoefficient.hpp
@@ -23,5 +24,5 @@ adaptive mesh refinement
   rc_dpg_S2hypre
 
 JFNK solving nonlinear Grad-Shafranov equation, not working well for many problems,
-as the preconditioner for Jacobian matrix is not good enough
+as the preconditioner for Jacobian matrix is not good enough so far
 
