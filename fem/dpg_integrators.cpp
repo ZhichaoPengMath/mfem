@@ -254,7 +254,8 @@ void DGVectorWeakDivergenceIntegrator::AssembleElementMatrix2(const FiniteElemen
 } /* end of DGVectorWeakDivergenceIntegrator */
 
 
-/* HDG */
+/* From HDG contributed by T. Horvath, S. Rhebergen, A. Sivas
+//                 University of Waterloo*/
 void SkeletonMassIntegrator::AssembleFaceMatrix(const FiniteElement &face_fe,
                                                 FaceElementTransformations &Trans,
                                                 DenseMatrix &elmat)
@@ -290,7 +291,8 @@ void SkeletonMassIntegrator::AssembleFaceMatrix(const FiniteElement &face_fe,
 
 } /* end of SkeletonMassIntegrator */
 
-/* HDG */
+/* From HDG branch contributed by T. Horvath, S. Rhebergen, A. Sivas
+//                 University of Waterloo*/
 void SkeletonMassIntegratorRHS::AssembleRHSElementVect(const FiniteElement &el,
                                                        FaceElementTransformations &Tr,
                                                        Vector &elvect)
