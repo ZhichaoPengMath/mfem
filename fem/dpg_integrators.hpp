@@ -93,7 +93,8 @@ public:
 
 /** Class for local mass RHS vector assembling l(\lamda,u) := <\lambda, u>
     It is used for the boundary elimination */
-/* from HDG branch */
+/* from HDG branch contributed by T. Horvath, S. Rhebergen, A. Sivas
+//                 University of Waterloo */
 class SkeletonMassIntegratorRHS: public LinearFormIntegrator
 {
 private:
